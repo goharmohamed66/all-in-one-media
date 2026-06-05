@@ -1,0 +1,68 @@
+{
+  "name": "mediagrab",
+  "version": "1.0.0",
+  "description": "MediaGrab — Media Downloader for TikTok, YouTube, Instagram, Facebook",
+  "main": "main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "postinstall": "node scripts/setup-binaries.js",
+    "setup": "node scripts/setup-binaries.js",
+    "server": "node server/server.js",
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.101.0",
+    "express": "^4.19.2",
+    "ffmpeg-static": "^5.2.0",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "build": {
+    "appId": "com.allinonemedia.app",
+    "productName": "All In One Media",
+    "files": [
+      "main.js",
+      "preload.js",
+      "server/**/*",
+      "!server/downloads/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

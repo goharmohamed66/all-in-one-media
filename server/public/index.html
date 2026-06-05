@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All In One Media</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </div>
+      <span class="brand-name">All In One Media</span>
+      <span class="brand-badge">v1.0</span>
+    </div>
+
+    <div class="top-actions">
+      <span class="conn" id="connStatus"><i class="dot"></i> Connecting…</span>
+      <button class="icon-btn" id="btnStats" title="إحصائيات">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </button>
+      <button class="icon-btn" id="btnSaved" title="المحفوظات">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="icon-btn" id="btnHistory" title="السجل">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+      </button>
+      <button class="icon-btn" id="btnSettings" title="الإعدادات">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Platform tabs ── -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-platform="tiktok">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
+      TikTok
+    </button>
+    <button class="tab" data-platform="youtube">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23 12s0-3.5-.46-5.2a3 3 0 0 0-2.1-2.1C18.7 4.2 12 4.2 12 4.2s-6.7 0-8.44.5A3 3 0 0 0 1.46 6.8C1 8.5 1 12 1 12s0 3.5.46 5.2a3 3 0 0 0 2.1 2.1c1.74.5 8.44.5 8.44.5s6.7 0 8.44-.5a3 3 0 0 0 2.1-2.1C23 15.5 23 12 23 12zM9.75 15.5v-7l6 3.5z"/></svg>
+      YouTube
+    </button>
+    <button class="tab" data-platform="instagram">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg>
+      Instagram
+    </button>
+    <button class="tab" data-platform="facebook">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+      Facebook
+    </button>
+  </nav>
+
+  <!-- ── URL bar ── -->
+  <section class="panel url-panel">
+    <div class="url-row">
+      <div class="url-input">
+        <svg class="lead-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <input type="text" id="urlInput" placeholder="الصق رابط فيديو أو رابط قناة/حساب…">
+        <button class="mini-icon" id="btnPaste" title="لصق">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="mini-icon" id="btnClear" title="مسح">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <button class="btn ghost" id="btnInfo">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Get Info
+      </button>
+      <button class="btn primary" id="btnDownload">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Search ── -->
+  <section class="panel search-panel">
+    <div class="panel-title">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search</span>
+    </div>
+    <div class="search-row">
+      <div class="tag-input" id="tagInput">
+        <span class="tags" id="tagList"></span>
+        <input type="text" id="searchInput" placeholder="اكتب كلمة واضغط Enter لإضافتها…">
+      </div>
+      <select id="searchDepth" class="search-depth" title="عدد النتائج لكل كلمة">
+        <option value="30">30 لكل كلمة</option>
+        <option value="60">60 لكل كلمة</option>
+        <option value="90">90 لكل كلمة</option>
+        <option value="150">150 لكل كلمة</option>
+      </select>
+      <button class="btn ghost" id="btnImageSearch" title="بحث بصورة المنتج">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        بحث بصورة
+      </button>
+      <input type="file" id="imageFileInput" accept="image/*" hidden>
+      <button class="btn primary" id="btnSearch">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search
+      </button>
+    </div>
+    <div class="search-hint">💡 أضف كذا كلمة للمنتج الواحد (Enter بعد كل كلمة)، أو ارفع صورة المنتج بزر «بحث بصورة» ليولّد الكلمات تلقائياً.</div>
+  </section>
+
+  <!-- ── Results ── -->
+  <section class="panel results-panel" id="resultsPanel" hidden>
+    <div class="results-head">
+      <div class="results-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Results</span>
+        <span class="count-badge" id="resultsCount">0 عنصر</span>
+      </div>
+      <div class="results-actions">
+        <select id="sortSelect" class="sort-select" title="ترتيب النتائج">
+          <option value="default">ترتيب: الافتراضي</option>
+          <option value="views">الأكثر مشاهدة</option>
+        </select>
+        <button class="link-btn" id="btnSelectAll">Select All</button>
+        <button class="link-btn" id="btnDeselectAll">Deselect All</button>
+        <button class="btn ghost sm" id="btnDownloadSelected">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Selected ( <span id="selCount">0</span> )
+        </button>
+        <button class="btn primary sm" id="btnDownloadAll">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download All
+        </button>
+      </div>
+    </div>
+    <div class="results-grid" id="resultsGrid"></div>
+    <div class="results-loading" id="resultsLoading" hidden>
+      <div class="spinner"></div><span>جاري الجلب…</span>
+    </div>
+  </section>
+
+  <!-- ── Download Queue ── -->
+  <section class="panel queue-panel">
+    <div class="queue-head">
+      <div class="panel-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>Download Queue</span>
+      </div>
+      <div class="queue-actions">
+        <button class="link-btn danger" id="btnClearCompleted">Clear Completed</button>
+      </div>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+    <div class="queue-empty" id="queueEmpty">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>No active downloads</span>
+    </div>
+  </section>
+
+</div>
+
+<!-- settings modal -->
+<div class="modal-overlay" id="settingsModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h3>الإعدادات</h3>
+      <button class="icon-btn" id="btnCloseSettings">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>مجلد التنزيل</span>
+        <div class="field-row">
+          <input type="text" id="setDownloadDir" readonly>
+          <button class="btn ghost sm" id="btnChooseDir">تغيير</button>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>جودة الفيديو (يوتيوب)</span>
+        <select id="setQuality">
+          <option value="best">أعلى جودة</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+        </select>
+      </label>
+
+      <div class="field" id="accountsField">
+        <span>الحسابات <small>(سجّل دخول مرة واحدة جوّه البرنامج لتحميل محتوى إنستجرام/فيسبوك)</small></span>
+        <div class="account-row">
+          <div class="account-info">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/></svg>
+            <span>Instagram</span>
+            <span class="acc-status" id="igStatus">غير مسجّل</span>
+          </div>
+          <div class="account-btns">
+            <button class="btn ghost sm" data-login="instagram">تسجيل دخول</button>
+            <button class="btn ghost sm danger-btn" data-logout="instagram" hidden>خروج</button>
+          </div>
+        </div>
+        <div class="account-row">
+          <div class="account-info">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+            <span>Facebook</span>
+            <span class="acc-status" id="fbStatus">غير مسجّل</span>
+          </div>
+          <div class="account-btns">
+            <button class="btn ghost sm" data-login="facebook">تسجيل دخول</button>
+            <button class="btn ghost sm danger-btn" data-logout="facebook" hidden>خروج</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field" id="claudeField">
+        <span>Claude API <small>(للبحث بصورة المنتج — يحوّل الصورة لكلمات بحث)</small></span>
+        <div class="field-row">
+          <input type="password" id="setApiKey" placeholder="sk-ant-api03-…" autocomplete="off">
+          <button class="btn primary sm" id="btnConnectAI">ربط</button>
+        </div>
+        <div class="account-row" id="claudeStatusRow" hidden>
+          <div class="account-info">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M8 12l3 3 5-6"/></svg>
+            <span>مرتبط</span>
+            <span class="acc-status on">✓</span>
+          </div>
+          <button class="btn ghost sm danger-btn" id="btnDisconnectAI">فصل</button>
+        </div>
+        <label class="sub-field" id="modelField" hidden>
+          <span>الموديل</span>
+          <select id="setModel"></select>
+        </label>
+        <small class="hint">المفتاح بيتحفظ على جهازك فقط. الموديل الافتراضي: Claude Opus 4.8 (الأعلى).</small>
+      </div>
+
+      <label class="field">
+        <span>الكوكيز من المتصفح <small>(بديل: لو مش عايز تسجّل دخول جوّه البرنامج)</small></span>
+        <select id="setCookies">
+          <option value="none">بدون</option>
+          <option value="chrome">Chrome</option>
+          <option value="edge">Edge</option>
+          <option value="firefox">Firefox</option>
+          <option value="brave">Brave</option>
+          <option value="opera">Opera</option>
+          <option value="safari">Safari (ماك)</option>
+        </select>
+        <small class="hint">ملاحظة: Chrome بيقفل الكوكيز وهو مفتوح. الأفضل تسجّل دخول جوّه البرنامج فوق، أو تستخدم Firefox.</small>
+      </label>
+
+      <div class="field" id="downloadsField">
+        <span>التحميل والتحديثات <small>(الإصدار الحالي: <b id="appVersion">—</b>)</small></span>
+        <div class="dl-buttons">
+          <button class="btn ghost sm" id="btnDlWin">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M3 5.5L10 4.5v7H3zM11 4.3L21 3v8.5H11zM3 12.5h7v7L3 18.5zM11 12.5h10V21l-10-1.3z"/></svg>
+            نسخة ويندوز
+          </button>
+          <button class="btn ghost sm" id="btnDlMac">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M16 1c.1 1-.3 2-1 2.8-.7.8-1.7 1.4-2.7 1.3-.1-1 .4-2 1-2.7C14 1.6 15 1.1 16 1zm3 16c-.5 1.2-.8 1.7-1.4 2.7-1 1.5-2.3 3.3-4 3.3-1.4 0-1.8-.9-3.7-.9s-2.3.9-3.7.9c-1.6 0-2.9-1.7-3.8-3.1C-.1 16-1 11.5.8 8.6 1.7 7.2 3.3 6.3 5 6.3c1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.9 6.8-1 8.6z"/></svg>
+            نسخة ماك
+          </button>
+        </div>
+        <details class="dl-links">
+          <summary>روابط التحميل (للمطوّر)</summary>
+          <label class="sub-field"><span>رابط نسخة ويندوز</span><input type="text" id="setWinUrl" placeholder="https://…/All In One Media Setup.exe"></label>
+          <label class="sub-field"><span>رابط نسخة ماك</span><input type="text" id="setMacUrl" placeholder="https://…/All In One Media.dmg"></label>
+          <small class="hint">ارفع النسخ على GitHub Releases (أو أي استضافة) وحطّ الروابط هنا، تتحفظ مع الإعدادات.</small>
+        </details>
+      </div>
+
+      <details class="guide">
+        <summary>📖 دليل التثبيت والتشغيل (ويندوز / ماك)</summary>
+        <div class="guide-body">
+          <h4>🪟 على ويندوز</h4>
+          <p><b>المستخدم العادي:</b> افتح ملف <code>MediaGrab Setup.exe</code> من مجلد <code>dist</code> → التثبيت عادي → افتح من قائمة Start.</p>
+          <p><b>تشغيل من الكود:</b></p>
+          <pre>npm install
+npm start</pre>
+
+          <h4>🍎 على ماك</h4>
+          <p><b>1)</b> انقل مجلد المشروع كامل للماك <u>بدون</u> مجلدي <code>node_modules</code> و <code>dist</code> و <code>bin</code> (هيتعملوا تلقائياً).</p>
+          <p><b>2)</b> ثبّت Node.js من <code>nodejs.org</code>، ثم في Terminal داخل مجلد المشروع:</p>
+          <pre>npm install      # ينزّل أدوات ماك تلقائياً
+npm start        # لتشغيله مباشرة
+npm run build:mac  # لبناء نسخة .dmg مثبّتة</pre>
+          <p><b>3)</b> أول تشغيل لنسخة الماك: كليك يمين على التطبيق → Open. لو اعترض:</p>
+          <pre>xattr -cr "/Applications/MediaGrab.app"</pre>
+          <p class="guide-note">ملاحظة: نسخة الماك تُبنى على جهاز ماك فقط (قيد من أبل)، وابنِها على نفس نوع المعالج (Apple Silicon أو Intel).</p>
+        </div>
+      </details>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="btnCancelSettings">إلغاء</button>
+      <button class="btn primary" id="btnSaveSettings">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
