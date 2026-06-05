@@ -276,23 +276,29 @@
       </div>
 
       <details class="guide">
-        <summary>📖 دليل التثبيت والتشغيل (ويندوز / ماك)</summary>
+        <summary>📖 إزاي أشغّل البرنامج؟ (شرح للمبتدئين)</summary>
         <div class="guide-body">
           <h4>🪟 على ويندوز</h4>
-          <p><b>المستخدم العادي:</b> افتح ملف <code>MediaGrab Setup.exe</code> من مجلد <code>dist</code> → التثبيت عادي → افتح من قائمة Start.</p>
-          <p><b>تشغيل من الكود:</b></p>
-          <pre>npm install
-npm start</pre>
+          <p><b>1.</b> فوق في «التحميل والتحديثات» اضغط زر <b>«نسخة ويندوز»</b> (أو نزّله من صفحة Releases على GitHub).</p>
+          <p><b>2.</b> افتح الملف اللي نزل: <code>All-In-One-Media-Setup.exe</code> (دبل-كليك).</p>
+          <p><b>3.</b> لو ظهرت رسالة زرقاء من ويندوز (SmartScreen): اضغط <b>More info</b> ثم <b>Run anyway</b> — البرنامج سليم بس مش موقّع بشهادة مدفوعة.</p>
+          <p><b>4.</b> كمّل التثبيت (Next) → هيفتح، وهتلاقيه في <b>قائمة Start</b> باسم «All In One Media».</p>
+          <p class="guide-note">مش محتاج تنزّل أي حاجة تانية — yt-dlp و ffmpeg جوه البرنامج.</p>
 
           <h4>🍎 على ماك</h4>
-          <p><b>1)</b> انقل مجلد المشروع كامل للماك <u>بدون</u> مجلدي <code>node_modules</code> و <code>dist</code> و <code>bin</code> (هيتعملوا تلقائياً).</p>
-          <p><b>2)</b> ثبّت Node.js من <code>nodejs.org</code>، ثم في Terminal داخل مجلد المشروع:</p>
-          <pre>npm install      # ينزّل أدوات ماك تلقائياً
-npm start        # لتشغيله مباشرة
-npm run build:mac  # لبناء نسخة .dmg مثبّتة</pre>
-          <p><b>3)</b> أول تشغيل لنسخة الماك: كليك يمين على التطبيق → Open. لو اعترض:</p>
-          <pre>xattr -cr "/Applications/MediaGrab.app"</pre>
-          <p class="guide-note">ملاحظة: نسخة الماك تُبنى على جهاز ماك فقط (قيد من أبل)، وابنِها على نفس نوع المعالج (Apple Silicon أو Intel).</p>
+          <p><b>1.</b> اضغط زر <b>«نسخة ماك»</b> فوق (أو نزّل ملف <code>.dmg</code> من Releases على GitHub).</p>
+          <p><b>2.</b> افتح ملف <code>All-In-One-Media-macOS.dmg</code>، واسحب أيقونة البرنامج لمجلد <b>Applications</b>.</p>
+          <p><b>3.</b> أول مرة بس: روح Applications، <b>كليك يمين</b> على البرنامج → <b>Open</b> → <b>Open</b>. (عشان البرنامج مش موقّع بشهادة أبل المدفوعة).</p>
+          <p><b>4.</b> لو ظهرت رسالة إنه «تالف» أو ميتفتحش، افتح Terminal واكتب:</p>
+          <pre>xattr -cr "/Applications/All In One Media.app"</pre>
+          <p>وبعدها افتحه عادي.</p>
+
+          <h4>👨‍💻 للمطوّر (تشغيل من الكود)</h4>
+          <pre>git clone https://github.com/goharmohamed66/all-in-one-media.git
+cd all-in-one-media
+npm install
+npm start</pre>
+          <p class="guide-note">التحديثات بتنزل تلقائياً — لما يطلع إصدار أحدث البرنامج بيحدّث نفسه ويطلب إعادة تشغيل.</p>
         </div>
       </details>
     </div>

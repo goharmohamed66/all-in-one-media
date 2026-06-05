@@ -1,7 +1,35 @@
-# MediaGrab — Media Downloader
+# All In One Media
 
 تطبيق سطح مكتب (Windows + macOS) لتحميل الفيديوهات من **TikTok / YouTube / Instagram / Facebook**،
-مبني على Electron + سيرفر Node محلي (Express + Socket.IO) + yt-dlp + ffmpeg + TikWM.
+مع بحث بالكلمات وبحث بصورة المنتج (Claude AI)، مبني على Electron + سيرفر Node محلي + yt-dlp + ffmpeg + TikWM.
+
+---
+
+## ⬇️ التثبيت والتشغيل (للمستخدم العادي)
+
+كل الإصدارات الجاهزة هنا: **[صفحة التحميل (Releases)](https://github.com/goharmohamed66/all-in-one-media/releases/latest)**
+
+### 🪟 على ويندوز
+1. نزّل ملف **`All-In-One-Media-Setup.exe`** من صفحة Releases (أو زر «نسخة ويندوز» داخل البرنامج).
+2. افتحه بدبل-كليك.
+3. لو ظهرت رسالة زرقاء (SmartScreen): **More info** → **Run anyway** (البرنامج سليم، بس غير موقّع بشهادة مدفوعة).
+4. كمّل التثبيت → يفتح، وتلاقيه في **قائمة Start** باسم «All In One Media».
+
+> مش محتاج تنزّل أي حاجة تانية — yt-dlp و ffmpeg جوه البرنامج.
+
+### 🍎 على ماك
+1. نزّل ملف **`All-In-One-Media-macOS.dmg`** من صفحة Releases.
+2. افتحه واسحب البرنامج لمجلد **Applications**.
+3. أول مرة بس: **كليك يمين** على البرنامج → **Open** → **Open** (عشان مش موقّع بشهادة أبل المدفوعة).
+4. لو قال «تالف» أو ميفتحش، افتح Terminal واكتب:
+   ```bash
+   xattr -cr "/Applications/All In One Media.app"
+   ```
+   وبعدها افتحه عادي.
+
+> **التحديث تلقائي:** لما يطلع إصدار أحدث، البرنامج بيحدّث نفسه ويطلب إعادة تشغيل — مش هتحتاج تنزّله تاني.
+
+---
 
 ## المعمارية
 - **Electron Main** (`main.js`) — يشغّل السيرفر كـ child process ويفتح النافذة على `http://127.0.0.1:3456`.
