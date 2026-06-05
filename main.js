@@ -1,5 +1,6 @@
 'use strict';
 const { app, BrowserWindow, shell, ipcMain, dialog, session } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -288,6 +289,40 @@ function parseIgTagResponse(json) {
   return out;
 }
 
+// ───────────────────────── auto-update ─────────────────────────
+function setupAutoUpdates() {
+  if (!app.isPackaged) return; // only in the installed app
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { state: 'available', version: info.version });
+  });
+  autoUpdater.on('download-progress', (p) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { state: 'downloading', percent: Math.round(p.percent) });
+  });
+  autoUpdater.on('update-downloaded', async (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { state: 'downloaded', version: info.version });
+    const r = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['إعادة التشغيل الآن', 'لاحقاً'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'تحديث جديد متاح',
+      message: `تم تنزيل النسخة ${info.version}.`,
+      detail: 'هتتثبّت لما تعيد تشغيل البرنامج.',
+    });
+    if (r.response === 0) { setImmediate(() => autoUpdater.quitAndInstall()); }
+  });
+  autoUpdater.on('error', (e) => {
+    console.error('[updater] error:', e && e.message);
+  });
+
+  // check on startup, then every 3 hours
+  autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 3 * 60 * 60 * 1000);
+}
+
 app.whenReady().then(async () => {
   try {
     await startServer();
@@ -295,6 +330,7 @@ app.whenReady().then(async () => {
     console.error('Failed to start server:', e);
   }
   createWindow();
+  setupAutoUpdates();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

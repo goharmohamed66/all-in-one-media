@@ -68,8 +68,9 @@ const DEFAULT_CONFIG = {
   videoQuality: 'best',   // best | 1080 | 720 | 480
   anthropicApiKey: '',    // Claude API key (stored locally only)
   anthropicModel: 'claude-opus-4-8', // selected Claude model (default: highest)
-  downloadWinUrl: '',     // direct link to the latest Windows installer
-  downloadMacUrl: '',     // direct link to the latest macOS .dmg
+  // stable "latest release" links — always serve the newest published build
+  downloadWinUrl: 'https://github.com/goharmohamed66/all-in-one-media/releases/latest/download/All-In-One-Media-Setup.exe',
+  downloadMacUrl: 'https://github.com/goharmohamed66/all-in-one-media/releases/latest/download/All-In-One-Media-macOS.dmg',
 };
 
 let APP_VERSION = '1.0.0';

@@ -689,6 +689,15 @@ $('#imageFileInput').addEventListener('change', async (e) => {
   }
 });
 
+// ── auto-update notifications ──
+if (window.electronAPI && window.electronAPI.onUpdateStatus) {
+  window.electronAPI.onUpdateStatus((d) => {
+    if (d.state === 'available') toast(`تحديث جديد (${d.version}) — جاري التنزيل…`, '');
+    else if (d.state === 'downloading') setConn('online', `Connected · تحديث ${d.percent}%`);
+    else if (d.state === 'downloaded') toast(`التحديث ${d.version} جاهز — هيتثبّت عند إعادة التشغيل.`, 'success');
+  });
+}
+
 // ── other top icon buttons ──
 $('#btnHistory').addEventListener('click', () => toast('السجل: قريباً.', ''));
 $('#btnSaved').addEventListener('click', () => toast('المحفوظات: قريباً.', ''));

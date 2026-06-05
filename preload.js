@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   logoutPlatform: (platform) => ipcRenderer.invoke('logout-platform', platform),
   cookiesStatus: () => ipcRenderer.invoke('cookies-status'),
   igSearch: (query) => ipcRenderer.invoke('ig-search', query),
+  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_e, data) => cb(data)),
   isElectron: true,
 });

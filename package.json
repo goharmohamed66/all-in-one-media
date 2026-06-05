@@ -1,7 +1,7 @@
 {
-  "name": "mediagrab",
-  "version": "1.0.0",
-  "description": "MediaGrab — Media Downloader for TikTok, YouTube, Instagram, Facebook",
+  "name": "all-in-one-media",
+  "version": "1.0.1",
+  "description": "All In One Media — Downloader for TikTok, YouTube, Instagram, Facebook",
   "main": "main.js",
   "author": "",
   "license": "MIT",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.101.0",
+    "electron-updater": "^6.8.3",
     "express": "^4.19.2",
     "ffmpeg-static": "^5.2.0",
     "socket.io": "^4.7.5"
@@ -29,6 +30,13 @@
   "build": {
     "appId": "com.allinonemedia.app",
     "productName": "All In One Media",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "goharmohamed66",
+        "repo": "all-in-one-media"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
@@ -48,17 +56,16 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "All-In-One-Media-Setup.${ext}"
     },
     "mac": {
-      "target": "dmg",
+      "target": ["dmg", "zip"],
       "category": "public.app-category.utilities",
       "identity": null,
       "hardenedRuntime": false,
-      "gatekeeperAssess": false
-    },
-    "dmg": {
-      "writeUpdateInfo": false
+      "gatekeeperAssess": false,
+      "artifactName": "All-In-One-Media-macOS.${ext}"
     },
     "nsis": {
       "oneClick": false,
