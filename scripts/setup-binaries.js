@@ -28,19 +28,20 @@ function ytdlpTarget() {
 function download(url, dest, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > 8) return reject(new Error('Too many redirects'));
-    const tmp = dest + '.part';
-    const file = fs.createWriteStream(tmp);
-    const req = https.get(url, { headers: { 'User-Agent': 'MediaGrab-Setup' } }, (res) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'AllInOneMedia-Setup' } }, (res) => {
+      // follow redirects BEFORE touching any file (avoids tmp-file races)
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.close();
-        fs.rm(tmp, { force: true }, () => {});
+        res.resume();
         return resolve(download(res.headers.location, dest, redirects + 1));
       }
       if (res.statusCode !== 200) {
-        file.close();
-        fs.rm(tmp, { force: true }, () => {});
+        res.resume();
         return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
       }
+
+      // final response: now open the temp file
+      const tmp = dest + '.part';
+      const file = fs.createWriteStream(tmp);
       const total = parseInt(res.headers['content-length'] || '0', 10);
       let received = 0;
       let lastLog = 0;
@@ -55,17 +56,15 @@ function download(url, dest, redirects = 0) {
       res.pipe(file);
       file.on('finish', () => {
         file.close(() => {
-          fs.renameSync(tmp, dest);
+          try { fs.renameSync(tmp, dest); }
+          catch (e) { return reject(e); }
           process.stdout.write(`\r   ${path.basename(dest)}: done       \n`);
           resolve();
         });
       });
+      file.on('error', (err) => { fs.rm(tmp, { force: true }, () => {}); reject(err); });
     });
-    req.on('error', (err) => {
-      file.close();
-      fs.rm(tmp, { force: true }, () => {});
-      reject(err);
-    });
+    req.on('error', reject);
   });
 }
 
