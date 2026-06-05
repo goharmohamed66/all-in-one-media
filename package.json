@@ -13,7 +13,10 @@
     "dev": "electron . --dev",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac",
+    "release:win": "electron-builder --win --publish always",
+    "release:mac": "electron-builder --mac --publish always",
+    "release-mac": "bash scripts/release-mac.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.101.0",

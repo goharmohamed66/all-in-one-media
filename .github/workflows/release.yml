@@ -1,0 +1,37 @@
+name: Release
+
+# Builds Windows + macOS installers and publishes them to GitHub Releases.
+# Trigger by pushing a version tag, e.g.:  git tag v1.0.2 && git push --tags
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # also allow manual run from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build & publish (electron-builder auto-detects the OS)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --publish always

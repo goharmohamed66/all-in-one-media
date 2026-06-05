@@ -43,6 +43,46 @@ npm run build:mac    # macOS (.dmg) — لازم يُبنى على جهاز ما
 - النسخة المبنية غير موقّعة (unsigned)؛ أول تشغيل: كليك يمين على التطبيق → Open، ولو لزم: `xattr -cr "/Applications/MediaGrab.app"`.
 - البناء بيكون لمعمارية الجهاز نفسه (Apple Silicon أو Intel) لأن `ffmpeg-static` ينزّل حسب الجهاز — ابنِ على نفس نوع الماك المستهدَف.
 
+## بنية المشروع
+```
+All In One Media/
+├─ main.js                 ← Electron: يشغّل السيرفر، النافذة، التحديث التلقائي، تسجيل الدخول
+├─ preload.js              ← جسر IPC الآمن بين الواجهة و Electron
+├─ package.json            ← الإعدادات، الإصدار، وإعدادات البناء (electron-builder)
+├─ server/
+│  ├─ server.js            ← قلب التطبيق: routes البحث/التحميل/الـ proxy + محركات yt-dlp و TikWM و Instagram + Claude
+│  └─ public/              ← الواجهة
+│     ├─ index.html        ← هيكل الصفحة
+│     ├─ style.css         ← التصميم
+│     └─ app.js            ← منطق الواجهة (البحث، الكروت، قائمة التحميل، الإعدادات)
+├─ scripts/
+│  ├─ setup-binaries.js    ← تنزيل yt-dlp تلقائياً (يعمل عند npm install)
+│  ├─ release-win.ps1      ← بناء ونشر ويندوز بأمر واحد
+│  └─ release-mac.sh       ← بناء ونشر ماك بأمر واحد
+├─ .github/workflows/
+│  └─ release.yml          ← CI: يبني ويندوز + ماك تلقائياً وينشرهم عند رفع tag
+├─ bin/                    ← (يتولّد) yt-dlp
+├─ node_modules/           ← (يتولّد) المكتبات
+└─ dist/                   ← (يتولّد) المثبّتات الناتجة
+```
+
+## النشر والتحديث التلقائي (Releases)
+البرنامج فيه **تحديث تلقائي** (electron-updater) — أي مستخدم مثبّت عنده النسخة بيتحدّث لوحده لما تنشر إصدار أحدث.
+
+### الطريقة الموصى بها (CI — تبني ويندوز وماك تلقائياً بدون جهاز ماك)
+1. عدّل الكود.
+2. زوّد رقم الإصدار في `package.json` (مثلاً `1.0.1` → `1.0.2`).
+3. ارفع tag:
+   ```
+   git add -A && git commit -m "v1.0.2"
+   git tag v1.0.2 && git push --follow-tags
+   ```
+4. GitHub Actions يبني **ويندوز وماك** على سيرفراته وينشرهم في Releases تلقائياً → كل المستخدمين يتحدّثوا لوحدهم. (تتابع التقدّم في تبويب **Actions** على GitHub).
+
+### بديل (بناء محلي بأمر واحد)
+- **ويندوز:** `powershell -ExecutionPolicy Bypass -File scripts\release-win.ps1`
+- **ماك:** `bash scripts/release-mac.sh`  (لازم `gh auth login` مرة واحدة)
+
 ## ملاحظات
 - `yt-dlp` يُنزَّل تلقائياً في `bin/` عند `npm install` (نسخة ويندوز أو ماك حسب النظام). لو فشل، نزّله يدوياً هناك.
 - `ffmpeg` يأتي من حزمة `ffmpeg-static` (cross-platform).
