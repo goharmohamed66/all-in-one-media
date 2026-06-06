@@ -269,34 +269,51 @@ ipcMain.handle('fb-search', async (_e, query, maxResults) => {
   const max = Math.max(10, Math.min(150, maxResults || 40));
   query = normalizeArabic(query) || query;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // OFFSCREEN rendering: the page actually paints (so Facebook's lazy-load fires
+  // on scroll) without ever showing a window to the user.
   const win = new BrowserWindow({
-    show: false, width: 1280, height: 1600,
-    webPreferences: { partition: SESSION_PARTITION, contextIsolation: true, nodeIntegration: false },
+    show: false, width: 1200, height: 1600,
+    webPreferences: { partition: SESSION_PARTITION, offscreen: true, backgroundThrottling: false, contextIsolation: true, nodeIntegration: false },
   });
   win.webContents.setUserAgent(APP_UA);
+  win.webContents.setFrameRate(8);
+  win.webContents.on('paint', () => {}); // keep the offscreen compositor active
   try {
-    await win.loadURL('https://www.facebook.com/search/videos/?q=' + encodeURIComponent(query));
+    await Promise.race([
+      win.loadURL('https://www.facebook.com/search/videos/?q=' + encodeURIComponent(query)),
+      sleep(15000),
+    ]);
     await sleep(5000);
     let items = [];
-    let stable = 0;
-    for (let i = 0; i < 18; i++) {
+    let lastCount = -1, stable = 0;
+    for (let i = 0; i < 45; i++) {
       items = await win.webContents.executeJavaScript(FB_EXTRACT).catch(() => items);
       if (items.length >= max) break;
-      if (i > 0 && items.length === (win._lastCount || 0)) { stable++; if (stable >= 3) break; } else stable = 0;
-      win._lastCount = items.length;
+      if (items.length === lastCount) { stable++; if (stable >= 8) break; } else stable = 0;
+      lastCount = items.length;
+      // real mouse-wheel events drive Facebook's infinite scroll
+      for (let k = 0; k < 12; k++) {
+        win.webContents.sendInputEvent({ type: 'mouseWheel', x: 600, y: 800, deltaX: 0, deltaY: -700, canScroll: true });
+        await sleep(110);
+      }
       await win.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)').catch(() => {});
-      await sleep(2500);
+      await sleep(2300);
     }
-    const cards = items.slice(0, max).map((it) => ({
-      platform: 'facebook',
-      id: String(it.id),
-      url: it.href.replace(/\/\/[a-z-]+\.facebook\.com/i, '//www.facebook.com'),
-      title: it.text || '(فيديو فيسبوك)',
-      thumbnail: /^https?:/i.test(it.thumb) ? it.thumb : '',
-      duration: 0,
-      views: 0,
-      author: '',
-    }));
+    const cards = items.slice(0, max).map((it) => {
+      const durMatch = /^(\d+):(\d{2})$/.exec((it.text || '').trim());
+      const duration = durMatch ? (parseInt(durMatch[1], 10) * 60 + parseInt(durMatch[2], 10)) : 0;
+      const title = (it.text && !durMatch) ? it.text : '(فيديو فيسبوك)';
+      return {
+        platform: 'facebook',
+        id: String(it.id),
+        url: it.href.replace(/\/\/[a-z-]+\.facebook\.com/i, '//www.facebook.com'),
+        title,
+        thumbnail: /^https?:/i.test(it.thumb) ? it.thumb : '',
+        duration,
+        views: 0,
+        author: '',
+      };
+    });
     return { items: cards };
   } catch (e) {
     return { items: [], error: e.message };
