@@ -242,6 +242,61 @@ ipcMain.handle('ig-search', async (_e, query) => {
   }
 });
 
+// ───────────────────────── Facebook keyword search (logged-in hidden window) ─────────────────────────
+// Facebook locks its search API; we load the real search page in a logged-in
+// hidden window (so FB's own JS runs) and scrape the rendered reel/video links.
+const FB_EXTRACT = `(() => {
+  const out = []; const seen = new Set();
+  document.querySelectorAll('a[href*="/reel/"], a[href*="/watch/?v="], a[href*="/videos/"]').forEach(a => {
+    const m = a.href.match(/\\/reel\\/(\\d+)|\\/watch\\/\\?v=(\\d+)|\\/videos\\/(\\d+)/);
+    if (!m) return;
+    const id = m[1] || m[2] || m[3];
+    if (!id || seen.has(id)) return; seen.add(id);
+    const img = a.querySelector('img');
+    out.push({ id, href: a.href.split('?')[0].replace(/#.*$/, ''), thumb: (img && img.src) || '', text: (a.innerText || '').replace(/\\s+/g,' ').trim().slice(0,80) });
+  });
+  return out;
+})()`;
+
+ipcMain.handle('fb-search', async (_e, query, maxResults) => {
+  const max = Math.max(10, Math.min(150, maxResults || 40));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const win = new BrowserWindow({
+    show: false, width: 1280, height: 1600,
+    webPreferences: { partition: SESSION_PARTITION, contextIsolation: true, nodeIntegration: false },
+  });
+  win.webContents.setUserAgent(APP_UA);
+  try {
+    await win.loadURL('https://www.facebook.com/search/videos/?q=' + encodeURIComponent(query));
+    await sleep(5000);
+    let items = [];
+    let stable = 0;
+    for (let i = 0; i < 18; i++) {
+      items = await win.webContents.executeJavaScript(FB_EXTRACT).catch(() => items);
+      if (items.length >= max) break;
+      if (i > 0 && items.length === (win._lastCount || 0)) { stable++; if (stable >= 3) break; } else stable = 0;
+      win._lastCount = items.length;
+      await win.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)').catch(() => {});
+      await sleep(2500);
+    }
+    const cards = items.slice(0, max).map((it) => ({
+      platform: 'facebook',
+      id: String(it.id),
+      url: it.href.replace(/\/\/[a-z-]+\.facebook\.com/i, '//www.facebook.com'),
+      title: it.text || '(فيديو فيسبوك)',
+      thumbnail: /^https?:/i.test(it.thumb) ? it.thumb : '',
+      duration: 0,
+      views: 0,
+      author: '',
+    }));
+    return { items: cards };
+  } catch (e) {
+    return { items: [], error: e.message };
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+});
+
 // Instagram nests media in several shapes per section; collect from all of them.
 function collectMediaFromLayout(lc, sink) {
   if (!lc || typeof lc !== 'object') return;

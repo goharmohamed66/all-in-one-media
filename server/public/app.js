@@ -252,6 +252,32 @@ async function doSearch() {
   $('#resultsLoading').hidden = false;
   setBtnLoading('#btnSearch', true);
 
+  // Facebook keyword search runs through a logged-in hidden window (FB locks its API)
+  if (state.platform === 'facebook' && window.electronAPI && window.electronAPI.fbSearch
+      && !keywords.some((k) => /^https?:/i.test(k) || k.startsWith('@'))) {
+    try {
+      const seen = new Set();
+      let any = false;
+      for (const kw of keywords) {
+        setSearchStatus(`بحث فيسبوك: ${kw}`);
+        const r = await window.electronAPI.fbSearch(kw, perKeyword);
+        (r.items || []).forEach((card) => {
+          if (card.id && !seen.has(card.id)) { seen.add(card.id); addResultCard(card); any = true; }
+        });
+      }
+      $('#resultsLoading').hidden = true;
+      setSearchStatus('جاري الجلب…');
+      updateResultsCount();
+      if (!any) toast('لا توجد نتائج (تأكد إنك مسجّل دخول فيسبوك من الإعدادات).', '');
+    } catch (e) {
+      $('#resultsLoading').hidden = true;
+      toast('فشل بحث فيسبوك. تأكد من تسجيل الدخول.', 'error');
+    } finally {
+      setBtnLoading('#btnSearch', false);
+    }
+    return;
+  }
+
   try {
     const r = await fetch('/api/search', {
       method: 'POST',
