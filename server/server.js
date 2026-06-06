@@ -290,10 +290,10 @@ function igCookieHeader() {
   if (!file) return null;
   try {
     const pairs = [];
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
       if (!line || line.startsWith('#')) continue;
-      const p = line.split('\t');
-      if (p.length >= 7 && p[5]) pairs.push(`${p[5]}=${p[6]}`);
+      const p = line.replace(/\r$/, '').split('\t');
+      if (p.length >= 7 && p[5]) pairs.push(`${p[5].trim()}=${(p[6] || '').trim()}`);
     }
     return pairs.length ? pairs.join('; ') : null;
   } catch { return null; }
@@ -317,11 +317,11 @@ function igRefreshCookies(setCookie) {
   const file = cookieFileFor('instagram');
   if (!file) return;
   let lines;
-  try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch { return; }
+  try { lines = fs.readFileSync(file, 'utf8').split(/\r?\n/); } catch { return; }
   const map = new Map(); // name -> [domain, sub, path, secure, expiry, name, value]
   for (const line of lines) {
     if (!line || line.startsWith('#')) continue;
-    const p = line.split('\t');
+    const p = line.replace(/\r$/, '').split('\t');
     if (p.length >= 7) map.set(p[5], p);
   }
   let changed = false;
@@ -356,9 +356,9 @@ function igCsrfToken() {
   const file = cookieFileFor('instagram');
   if (!file) return '';
   try {
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
-      const p = line.split('\t');
-      if (p.length >= 7 && p[5] === 'csrftoken') return p[6];
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const p = line.replace(/\r$/, '').split('\t');
+      if (p.length >= 7 && p[5] === 'csrftoken') return (p[6] || '').trim();
     }
   } catch {}
   return '';
@@ -457,18 +457,76 @@ async function igHashtagSearch(tag, maxResults, onCard) {
   return seen.size;
 }
 
+// Free-text keyword search (like the mobile app): /fbsearch/web/top_serp/ with
+// next_max_id + rank_token pagination. Handles phrases, not just hashtags.
+async function igKeywordSearch(query, maxResults, seen, onCard) {
+  const cookie = igCookieHeader();
+  if (!cookie) { const e = new Error('NO_IG_LOGIN'); e.code = 'NO_IG_LOGIN'; throw e; }
+  const csrf = igCsrfToken();
+  const headers = {
+    'x-ig-app-id': '936619743392459',
+    'User-Agent': YTDLP_UA,
+    'Cookie': cookie,
+    'Referer': 'https://www.instagram.com/explore/search/',
+    'x-csrftoken': csrf,
+    'x-requested-with': 'XMLHttpRequest',
+    'Accept': '*/*',
+  };
+  const q = encodeURIComponent(query);
+  let nextMaxId = '', rankToken = '', guard = 0, startCount = seen.size;
+  while (seen.size < maxResults && guard < 12) {
+    guard++;
+    let url = `https://www.instagram.com/api/v1/fbsearch/web/top_serp/?enable_metadata=true&query=${q}`;
+    if (nextMaxId) url += `&next_max_id=${encodeURIComponent(nextMaxId)}&rank_token=${encodeURIComponent(rankToken)}`;
+
+    const res = await httpRequest(url, { headers, timeout: 30000 });
+    igRefreshCookies(res.headers && res.headers['set-cookie']);
+    let json = null;
+    try { json = JSON.parse(res.body.toString('utf8')); } catch {}
+
+    if (res.status === 401 || res.status === 403) { const e = new Error('IG_LOGIN_EXPIRED'); e.code = 'IG_LOGIN_EXPIRED'; throw e; }
+    const grid = json && json.media_grid;
+    if (!grid) {
+      if (seen.size === startCount && !json) { const e = new Error('IG_LOGIN_EXPIRED'); e.code = 'IG_LOGIN_EXPIRED'; throw e; }
+      break;
+    }
+
+    for (const card of igReelCardsFromSections(grid.sections || [])) {
+      if (card.id && !seen.has(card.id)) {
+        if (onCard) onCard(card); // onCard adds to `seen` + emits
+        if (seen.size >= maxResults) break;
+      }
+    }
+
+    if (!grid.has_more) break;
+    nextMaxId = grid.next_max_id || '';
+    rankToken = json.rank_token || grid.rank_token || rankToken;
+    if (!nextMaxId) break;
+  }
+  return seen.size - startCount;
+}
+
 async function igSearchStream(keywords, perKeyword, socketId) {
   const seen = new Set();
   let idx = 0;
   let err = null;
   for (const kw of keywords) {
-    const tag = kw.replace(/^#/, '').replace(/\s+/g, '').trim();
-    if (!tag) continue;
-    emit(socketId, 'list:status', { message: `بحث: #${tag}` });
+    const raw = kw.trim();
+    if (!raw) continue;
+    const emitNew = (card) => {
+      if (card.id && !seen.has(card.id)) { seen.add(card.id); emit(socketId, 'list:item', { card, index: idx++ }); }
+    };
     try {
-      await igHashtagSearch(tag, perKeyword, (card) => {
-        if (card.id && !seen.has(card.id)) { seen.add(card.id); emit(socketId, 'list:item', { card, index: idx++ }); }
-      });
+      if (raw.startsWith('#')) {
+        // explicit hashtag → hashtag search
+        const tag = raw.replace(/^#/, '').replace(/\s+/g, '').trim();
+        emit(socketId, 'list:status', { message: `بحث: #${tag}` });
+        await igHashtagSearch(tag, perKeyword, emitNew);
+      } else {
+        // free-text keyword/phrase → keyword search (like the mobile app)
+        emit(socketId, 'list:status', { message: `بحث: ${raw}` });
+        await igKeywordSearch(raw, perKeyword, seen, emitNew);
+      }
     } catch (e) { err = e; }
   }
   if (seen.size === 0) {
