@@ -1045,8 +1045,9 @@ async function tiktokSearchStream(keywords, perKeyword, socketId) {
   const seen = new Set();
   let idx = 0;
   let errored = null;
-  for (const kw of keywords) {
-    emit(socketId, 'list:status', { message: `بحث: ${kw}` });
+  for (const kw0 of keywords) {
+    const kw = normalizeArabic(kw0) || kw0;
+    emit(socketId, 'list:status', { message: `بحث: ${kw0}` });
     let cursor = 0;
     let pulled = 0;
     let guard = 0;
@@ -1079,8 +1080,9 @@ async function youtubeSearchStream(keywords, perKeyword, socketId) {
   const seen = new Set();
   let idx = 0;
   let errored = null;
-  for (const kw of keywords) {
-    emit(socketId, 'list:status', { message: `بحث: ${kw}` });
+  for (const kw0 of keywords) {
+    const kw = normalizeArabic(kw0) || kw0;
+    emit(socketId, 'list:status', { message: `بحث: ${kw0}` });
     try {
       await ytdlpFlatList(`ytsearch${perKeyword}:${kw}`, {
         platform: 'youtube',
