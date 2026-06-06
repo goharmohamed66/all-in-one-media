@@ -724,7 +724,8 @@ $('#imageFileInput').addEventListener('change', async (e) => {
     if (!r.ok) throw new Error(data.error || 'فشل تحليل الصورة.');
     if (!data.keywords || !data.keywords.length) { toast('لم يتم استخراج كلمات من الصورة.', ''); return; }
     data.keywords.forEach((kw) => addKeyword(kw));
-    toast(`تم توليد ${data.keywords.length} كلمة — عدّلها لو حابب ثم اضغط Search.`, 'success');
+    const desc = data.product ? `${data.product} · ` : '';
+    toast(`${desc}تم توليد ${data.keywords.length} كلمة (إنجليزي/عربي/صيني) — عدّلها ثم اضغط Search.`, 'success');
   } catch (err) {
     toast(err.message, 'error');
   } finally {

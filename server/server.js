@@ -824,13 +824,12 @@ app.post('/api/ai/disconnect', (req, res) => {
 const KEYWORDS_SCHEMA = {
   type: 'object',
   properties: {
-    keywords: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Short search phrases for finding videos of this product',
-    },
+    product: { type: 'string', description: 'Short description of the product (type, brand, key attributes)' },
+    english: { type: 'array', items: { type: 'string' }, description: 'Exactly 7 English search phrases' },
+    arabic: { type: 'array', items: { type: 'string' }, description: 'Exactly 4 Arabic search phrases' },
+    chinese: { type: 'array', items: { type: 'string' }, description: 'Exactly 3 Chinese search phrases' },
   },
-  required: ['keywords'],
+  required: ['product', 'english', 'arabic', 'chinese'],
   additionalProperties: false,
 };
 
@@ -844,14 +843,19 @@ app.post('/api/ai/keywords', async (req, res) => {
 
   const model = CONFIG.anthropicModel || 'claude-opus-4-8';
   const prompt =
-    `هذه صورة منتج. ولّد من 4 إلى 7 عبارات بحث قصيرة للعثور على فيديوهات لنفس المنتج على ${platform}. ` +
-    `ركّز على نوع المنتج والماركة وأهم خصائصه، وأعطِ مزيجاً من العربية والإنجليزية. ` +
-    `كل عبارة من كلمتين إلى أربع كلمات.`;
+    `Analyze this product image carefully. Identify the product type, brand (if visible), ` +
+    `color, material, and key features, plus any visible text/logos. ` +
+    `Then produce search phrases to find videos of this exact product on ${platform}:\n` +
+    `- "english": EXACTLY 7 English phrases (2-4 words each)\n` +
+    `- "arabic": EXACTLY 4 Arabic phrases\n` +
+    `- "chinese": EXACTLY 3 Chinese (Simplified) phrases\n` +
+    `- "product": a one-line description of the product.\n` +
+    `Make the phrases specific and varied (product type + brand + key attribute). No hashtags, no numbering.`;
 
   try {
     const r = await client.messages.create({
       model,
-      max_tokens: 1024,
+      max_tokens: 2000,
       thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: KEYWORDS_SCHEMA } },
       messages: [
@@ -865,9 +869,13 @@ app.post('/api/ai/keywords', async (req, res) => {
       ],
     });
     const textBlock = (r.content || []).find((b) => b.type === 'text');
-    let keywords = [];
-    try { keywords = (JSON.parse(textBlock.text).keywords || []).filter(Boolean); } catch {}
-    res.json({ keywords, model });
+    let parsed = {};
+    try { parsed = JSON.parse(textBlock.text); } catch {}
+    const keywords = []
+      .concat(parsed.english || [], parsed.arabic || [], parsed.chinese || [])
+      .map((s) => String(s).trim())
+      .filter(Boolean);
+    res.json({ keywords, product: parsed.product || '', model });
   } catch (e) {
     const msg = (e && e.status === 401) ? 'مفتاح Claude غير صالح.' : (e.message || 'فشل تحليل الصورة.');
     res.status(400).json({ error: msg });
