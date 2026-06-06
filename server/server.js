@@ -139,10 +139,10 @@ function isFacebookProfile(url) {
 /** YouTube quality → yt-dlp format selector */
 function ytFormatSelector() {
   const q = CONFIG.videoQuality;
-  if (q && q !== 'best' && /^\d+$/.test(q)) {
-    return `bv*[height<=${q}]+ba/b[height<=${q}]/bv*+ba/b`;
-  }
-  return 'bv*+ba/b';
+  const h = (q && q !== 'best' && /^\d+$/.test(q)) ? `[height<=${q}]` : '';
+  // Prefer H.264 video + AAC audio (mp4) so the file plays everywhere WITH sound.
+  // (Best quality on YouTube is often AV1 + Opus, which many players show silent.)
+  return `bv*${h}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*${h}[ext=mp4]+ba[ext=m4a]/b${h}[ext=mp4]/bv*${h}+ba/b${h}`;
 }
 
 // ───────────────────────────── small http helper ─────────────────────────────
