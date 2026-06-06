@@ -258,8 +258,16 @@ const FB_EXTRACT = `(() => {
   return out;
 })()`;
 
+function normalizeArabic(s) {
+  return String(s || '')
+    .replace(/[ً-ْٰـ]/g, '')
+    .replace(/[آأإٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ء/g, '').replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ').trim();
+}
+
 ipcMain.handle('fb-search', async (_e, query, maxResults) => {
   const max = Math.max(10, Math.min(150, maxResults || 40));
+  query = normalizeArabic(query) || query;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const win = new BrowserWindow({
     show: false, width: 1280, height: 1600,

@@ -458,6 +458,20 @@ async function igHashtagSearch(tag, maxResults, onCard) {
 }
 
 // Free-text keyword search (like the mobile app): /fbsearch/web/top_serp/ with
+// Normalize Arabic (alef/hamza variants, tashkeel) so spelling differences match,
+// the same way the mobile apps do — e.g. "القرءان" and "القرآن" both match.
+function normalizeArabic(s) {
+  return String(s || '')
+    .replace(/[ً-ْٰـ]/g, '') // tashkeel + tatweel
+    .replace(/[آأإٱ]/g, 'ا') // آ أ إ ٱ → ا
+    .replace(/ؤ/g, 'و') // ؤ → و
+    .replace(/ئ/g, 'ي') // ئ → ي
+    .replace(/ء/g, '') // ء → (remove)
+    .replace(/ى/g, 'ي') // ى → ي
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // next_max_id + rank_token pagination. Handles phrases, not just hashtags.
 async function igKeywordSearch(query, maxResults, seen, onCard) {
   const cookie = igCookieHeader();
@@ -472,7 +486,7 @@ async function igKeywordSearch(query, maxResults, seen, onCard) {
     'x-requested-with': 'XMLHttpRequest',
     'Accept': '*/*',
   };
-  const q = encodeURIComponent(query);
+  const q = encodeURIComponent(normalizeArabic(query));
   let nextMaxId = '', rankToken = '', guard = 0, startCount = seen.size;
   while (seen.size < maxResults && guard < 12) {
     guard++;
