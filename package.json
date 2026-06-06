@@ -37,7 +37,8 @@
       {
         "provider": "github",
         "owner": "goharmohamed66",
-        "repo": "all-in-one-media"
+        "repo": "all-in-one-media",
+        "releaseType": "release"
       }
     ],
     "files": [
