@@ -140,9 +140,9 @@ function isFacebookProfile(url) {
 function ytFormatSelector() {
   const q = CONFIG.videoQuality;
   const h = (q && q !== 'best' && /^\d+$/.test(q)) ? `[height<=${q}]` : '';
-  // Prefer H.264 video + AAC audio (mp4) so the file plays everywhere WITH sound.
-  // (Best quality on YouTube is often AV1 + Opus, which many players show silent.)
-  return `bv*${h}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*${h}[ext=mp4]+ba[ext=m4a]/b${h}[ext=mp4]/bv*${h}+ba/b${h}`;
+  // Prefer H.264 + AAC (plays everywhere, incl. QuickTime). Avoid AV1.
+  // Anything that isn't H.264 is re-encoded to H.264 by --recode-video mp4.
+  return `bv*${h}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*${h}[vcodec^=avc1]+ba/bv*${h}[vcodec!*=av01]+ba/b${h}[vcodec!*=av01]/b${h}`;
 }
 
 // ───────────────────────────── small http helper ─────────────────────────────
@@ -1252,7 +1252,9 @@ function downloadViaYtdlp(item, format, id, socketId, useCookies = false) {
     if (format === 'mp3') {
       args.push('-x', '--audio-format', 'mp3', '--audio-quality', '2');
     } else {
-      args.push('-f', ytFormatSelector(), '--merge-output-format', 'mp4');
+      // recode-video re-encodes ONLY non-mp4 (VP9/AV1) sources to H.264 mp4;
+      // H.264 sources are just merged (fast). Guarantees QuickTime playback.
+      args.push('-f', ytFormatSelector(), '--recode-video', 'mp4');
     }
     // print final path after move
     args.push('--print', 'after_move:filepath', '--no-simulate');
