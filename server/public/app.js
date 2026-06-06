@@ -80,6 +80,11 @@ socket.on('list:error', ({ message }) => {
 
 socket.on('progress', (d) => updateQueue(d));
 
+// show the real app version in the header badge (updates with each release)
+fetch('/api/config').then((r) => r.json()).then((c) => {
+  if (c && c.appVersion) $('#brandVersion').textContent = 'v' + c.appVersion;
+}).catch(() => {});
+
 function setConn(cls, text) {
   const c = $('#connStatus');
   c.className = 'conn ' + cls;
