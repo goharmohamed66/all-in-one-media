@@ -12,6 +12,7 @@ const state = {
   queue: new Map(),     // id -> queue item element data
   keywords: [],         // search keyword chips
   sortMode: 'default',  // 'default' | 'views'
+  autoDownloadIncoming: false, // auto-download streamed list items (multi-link)
 };
 
 // ── helpers ──
@@ -56,7 +57,12 @@ socket.on('connect', () => {
 socket.on('disconnect', () => setConn('offline', 'Disconnected'));
 socket.on('ready', (d) => { SOCKET_ID = d.id; DOWNLOAD_DIR = d.downloadDir || ''; });
 
-socket.on('list:item', ({ card }) => addResultCard(card));
+let _listDone = null; // resolver used to await a streamed list (multi-link downloads)
+
+socket.on('list:item', ({ card }) => {
+  addResultCard(card);
+  if (state.autoDownloadIncoming) startDownload(card, 'video');
+});
 socket.on('list:status', ({ message }) => setSearchStatus(message || 'جاري الجلب…'));
 socket.on('list:done', ({ count, stale }) => {
   $('#resultsLoading').hidden = true;
@@ -64,10 +70,12 @@ socket.on('list:done', ({ count, stale }) => {
   updateResultsCount();
   if (stale) toast('عرض آخر نتيجة محفوظة (المنصة تحظر مؤقتاً).', 'error');
   else toast(`تم جلب ${count} فيديو.`, 'success');
+  if (_listDone) { _listDone(count); _listDone = null; }
 });
 socket.on('list:error', ({ message }) => {
   $('#resultsLoading').hidden = true;
   toast(message || 'فشل الجلب.', 'error');
+  if (_listDone) { _listDone(0); _listDone = null; }
 });
 
 socket.on('progress', (d) => updateQueue(d));
@@ -103,13 +111,31 @@ $('#btnPaste').addEventListener('click', async () => {
 });
 $('#btnClear').addEventListener('click', () => ($('#urlInput').value = ''));
 
-$('#btnInfo').addEventListener('click', () => fetchInfo());
+$('#btnInfo').addEventListener('click', () => fetchInfo(false));
 $('#btnDownload').addEventListener('click', () => fetchInfo(true));
-$('#urlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') fetchInfo(); });
+// auto-grow the textarea; Ctrl/Cmd+Enter triggers download
+$('#urlInput').addEventListener('input', (e) => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
+});
+$('#urlInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fetchInfo(true); }
+});
+
+// extract one-or-more links from the box (one per line, or space-separated)
+function parseUrls(text) {
+  const out = [];
+  const seen = new Set();
+  (text || '').split(/[\s\n]+/).forEach((tok) => {
+    const u = tok.trim();
+    if (/^https?:\/\//i.test(u) && !seen.has(u)) { seen.add(u); out.push(u); }
+  });
+  return out;
+}
 
 async function fetchInfo(autoDownload = false) {
-  const url = $('#urlInput').value.trim();
-  if (!url) return toast('الصق رابطاً أولاً.', 'error');
+  const urls = parseUrls($('#urlInput').value);
+  if (!urls.length) return toast('الصق رابطاً واحداً على الأقل.', 'error');
 
   clearResults();
   showResults();
@@ -117,31 +143,44 @@ async function fetchInfo(autoDownload = false) {
   setBtnLoading('#btnInfo', true);
   setBtnLoading('#btnDownload', true);
 
-  try {
-    const r = await fetch('/api/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, socketId: SOCKET_ID }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'فشل الجلب.');
+  let okCount = 0, errCount = 0;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    if (urls.length > 1) setSearchStatus(`(${i + 1}/${urls.length}) ${url.slice(0, 50)}…`);
+    try {
+      const r = await fetch('/api/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, socketId: SOCKET_ID }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'فشل الجلب.');
 
-    if (data.streaming) {
-      // items will arrive via socket; loading stays until list:done
-      return;
+      if (data.streaming) {
+        // playlist / channel / profile → items arrive via socket
+        state.autoDownloadIncoming = autoDownload;
+        await new Promise((res) => { _listDone = res; });
+        state.autoDownloadIncoming = false;
+      } else {
+        (data.items || []).forEach(addResultCard);
+        if (autoDownload) (data.items || []).forEach((c) => startDownload(c, 'video'));
+      }
+      okCount++;
+    } catch (e) {
+      errCount++;
+      toast(`رابط ${i + 1}: ${e.message}`, 'error');
     }
-    $('#resultsLoading').hidden = true;
-    (data.items || []).forEach(addResultCard);
-    updateResultsCount();
-    if (autoDownload && data.items && data.items[0]) {
-      startDownload(data.items[0], 'video');
-    }
-  } catch (e) {
-    $('#resultsLoading').hidden = true;
-    toast(e.message, 'error');
-  } finally {
-    setBtnLoading('#btnInfo', false);
-    setBtnLoading('#btnDownload', false);
+  }
+
+  $('#resultsLoading').hidden = true;
+  setSearchStatus('جاري الجلب…');
+  updateResultsCount();
+  setBtnLoading('#btnInfo', false);
+  setBtnLoading('#btnDownload', false);
+  if (urls.length > 1) {
+    toast(autoDownload ? `بدأ تحميل من ${okCount} رابط${errCount ? ` (فشل ${errCount})` : ''}.`
+                       : `تم جلب ${okCount} رابط${errCount ? ` (فشل ${errCount})` : ''}.`,
+          errCount ? '' : 'success');
   }
 }
 

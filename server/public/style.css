@@ -74,14 +74,17 @@ body{
 .panel-title svg{color:var(--accent2)}
 
 /* ── url bar ── */
-.url-row{display:flex;gap:12px;align-items:stretch}
-.url-input{flex:1;display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--line);
+.url-row{display:flex;gap:12px;align-items:flex-start}
+.url-input{flex:1;display:flex;align-items:flex-start;gap:8px;background:var(--bg2);border:1px solid var(--line);
   border-radius:var(--radius-sm);padding:0 12px;transition:.15s}
 .url-input:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,94,252,.15)}
-.url-input .lead-icon{color:var(--muted2);flex:0 0 auto}
+.url-input .lead-icon{color:var(--muted2);flex:0 0 auto;margin-top:15px}
 .url-input input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px;
   height:48px;font-family:inherit}
-.url-input input::placeholder{color:var(--muted2)}
+.url-input textarea{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px;
+  font-family:inherit;resize:none;line-height:1.55;padding:14px 0;min-height:48px;max-height:180px;overflow-y:auto}
+.url-input input::placeholder,.url-input textarea::placeholder{color:var(--muted2)}
+.url-input .mini-icon{margin-top:9px}
 .mini-icon{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:var(--muted2);
   display:grid;place-items:center;cursor:pointer;transition:.15s;flex:0 0 auto}
 .mini-icon:hover{color:#fff;background:#1d2440}
