@@ -257,18 +257,39 @@ async function doSearch() {
       && !keywords.some((k) => /^https?:/i.test(k) || k.startsWith('@'))) {
     try {
       const seen = new Set();
-      let any = false;
+      const pending = [];
       for (const kw of keywords) {
         setSearchStatus(`بحث فيسبوك: ${kw}`);
         const r = await window.electronAPI.fbSearch(kw, perKeyword);
         (r.items || []).forEach((card) => {
-          if (card.id && !seen.has(card.id)) { seen.add(card.id); addResultCard(card); any = true; }
+          if (card.id && !seen.has(card.id)) { seen.add(card.id); pending.push(card); }
         });
       }
+      if (!pending.length) {
+        $('#resultsLoading').hidden = true; setSearchStatus('جاري الجلب…');
+        toast('لا توجد نتائج (تأكد إنك مسجّل دخول فيسبوك من الإعدادات).', '');
+        setBtnLoading('#btnSearch', false);
+        return;
+      }
+      // enrich each result with real metadata (title, views, hi-res thumbnail) in
+      // small parallel batches; show each card as soon as it's ready.
+      setSearchStatus(`جاري جلب تفاصيل ${pending.length} فيديو…`);
       $('#resultsLoading').hidden = true;
+      const BATCH = 5;
+      for (let i = 0; i < pending.length; i += BATCH) {
+        const batch = pending.slice(i, i + BATCH);
+        await Promise.all(batch.map(async (basic) => {
+          try {
+            const m = await (await fetch('/api/video-meta', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: basic.url }),
+            })).json();
+            addResultCard(m.card && m.card.id ? { ...basic, ...m.card } : basic);
+          } catch { addResultCard(basic); }
+        }));
+        updateResultsCount();
+      }
       setSearchStatus('جاري الجلب…');
-      updateResultsCount();
-      if (!any) toast('لا توجد نتائج (تأكد إنك مسجّل دخول فيسبوك من الإعدادات).', '');
+      toast(`تم جلب ${state.results.length} فيديو من فيسبوك.`, 'success');
     } catch (e) {
       $('#resultsLoading').hidden = true;
       toast('فشل بحث فيسبوك. تأكد من تسجيل الدخول.', 'error');

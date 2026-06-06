@@ -590,10 +590,14 @@ function hasCookies(platform) {
 // retrying with cookies only when the failure looks login-related.
 async function runWithCookieFallback(fn, platform) {
   const haveFile = !!cookieFileFor(platform);
+  // Instagram needs the login cookies up-front. Facebook/YouTube/TikTok work on
+  // PUBLIC content WITHOUT cookies — and Facebook actually FAILS ("Cannot parse
+  // data") when logged-in cookies are sent, so for those try no-cookies first.
+  const cookiesFirst = haveFile && platform === 'instagram';
   try {
-    return await fn(haveFile);
+    return await fn(cookiesFirst);
   } catch (e) {
-    if (!haveFile && hasCookies(platform) && isAuthError(e.raw || e.message)) {
+    if (!cookiesFirst && hasCookies(platform) && isAuthError(e.raw || e.message)) {
       return await fn(true);
     }
     throw e;
@@ -1151,6 +1155,19 @@ app.post('/api/search', async (req, res) => {
     return res.status(400).json({ error: 'منصة غير مدعومة للبحث.' });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'فشل البحث.' });
+  }
+});
+
+// Fetch real metadata for a single video URL (title, views, hi-res thumbnail,
+// duration) — used to enrich Facebook search results to full quality.
+app.post('/api/video-meta', async (req, res) => {
+  const { url } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'no url' });
+  try {
+    const info = await ytdlpSingleInfoSmart(url);
+    res.json({ card: ytdlpInfoToCard(info, url) });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'meta failed' });
   }
 });
 
