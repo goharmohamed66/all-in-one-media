@@ -124,7 +124,12 @@
         <span class="count-badge" id="resultsCount">0 عنصر</span>
       </div>
       <div class="results-actions">
-        <button class="btn ghost sm" id="btnVerify" hidden title="كلود يقارن كل نتيجة بصورة المنتج ويعلّم المطابق">
+        <input type="file" id="refImagesInput" accept="image/*" multiple hidden>
+        <button class="btn ghost sm" id="btnRefImages" hidden title="أضف صورة أو أكثر للمنتج (زوايا مختلفة/العلبة) ليتم التحقق عليها">
+          🖼 صور المنتج <span></span>
+        </button>
+        <button class="link-btn" id="btnRefClear" hidden title="مسح الصور المرجعية">✕</button>
+        <button class="btn ghost sm" id="btnVerify" hidden title="كلود يقارن كل نتيجة بصور المنتج ويعلّم المطابق">
           ✨ تحقق من المطابقة
         </button>
         <select id="matchFilter" class="sort-select" hidden title="فلترة نتائج التحقق">

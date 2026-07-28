@@ -965,13 +965,13 @@ const {
   isAllowedThumbUrl,
   parseVerdictResults,
   cardToVerifyItem,
+  normalizeRefImages,
 } = require('./verify-utils');
 
 const VERIFY_MAX_CARDS = 24;   // per request
 const VERIFY_BATCH = 8;        // thumbnails per Claude call
 const VERIFY_DEEP_MAX = 6;     // auto deep-checks per request
 const VERIFY_DEEP_FRAMES = 6;  // frames per deep check
-const VERIFY_IMG_B64_MAX = 11 * 1024 * 1024; // ~8MB binary once decoded
 
 // fetch a thumbnail (allowlisted host only) and return it as a base64 image block
 async function fetchThumbBase64(url) {
@@ -1010,16 +1010,22 @@ function extractFrames(videoPath, outDir, n, durationSec) {
   });
 }
 
-function productImageBlock(imageBase64, mediaType) {
-  return { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } };
+function productImageBlocks(refImages) {
+  return refImages.map((img) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: img.mediaType, data: img.base64 },
+  }));
 }
 
-const VERIFY_PROMPT_INTRO =
-  'The FIRST image is the reference product. Each numbered image after it is a video ' +
-  'thumbnail/frame labeled with its id. For each id decide if the video shows the EXACT ' +
-  'same product (same model, color, packaging/label — not just a similar item). ' +
-  'Be strict: variants of the same brand (different edition, color or label text) are no_match. ' +
-  'If the image is too unclear or the product is not visible, answer unsure.';
+function verifyPromptIntro(refCount) {
+  return (
+    `The FIRST ${refCount === 1 ? 'image is a reference photo' : refCount + ' images are reference photos'} ` +
+    'of ONE product. Each numbered image after that is a video thumbnail/frame labeled with its id. ' +
+    'For each id decide if the video shows the EXACT same product (same model, color, packaging/label — ' +
+    'not just a similar item). Be strict: variants of the same brand (different edition, color or ' +
+    'label text) are no_match. If the image is too unclear or the product is not visible, answer unsure.'
+  );
+}
 
 async function claudeVerdicts(client, model, contentBlocks, expectedIds) {
   const r = await client.messages.create({
@@ -1034,7 +1040,7 @@ async function claudeVerdicts(client, model, contentBlocks, expectedIds) {
 }
 
 // deep check: download the TikTok video to a temp dir, sample frames, ask again
-async function deepVerifyOne(client, model, productImg, item) {
+async function deepVerifyOne(client, model, productImgs, item) {
   const workDir = path.join(os.tmpdir(), 'mediagrab-verify', String(item.id));
   try {
     let play = '';
@@ -1045,7 +1051,7 @@ async function deepVerifyOne(client, model, productImg, item) {
     // 'verify:silent' is an empty socket room → progress events go nowhere
     const videoPath = await downloadFile(play, path.join(workDir, 'video'), `verify_${item.id}`, 'verify:silent');
     const frames = await extractFrames(videoPath, path.join(workDir, 'frames'), VERIFY_DEEP_FRAMES, item.duration);
-    const content = [productImg, { type: 'text', text: VERIFY_PROMPT_INTRO }];
+    const content = [...productImgs, { type: 'text', text: verifyPromptIntro(productImgs.length) }];
     content.push({ type: 'text', text: `id=${item.id} — the following ${frames.length} images are frames from ONE video:` });
     for (const f of frames) {
       content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: fs.readFileSync(f).toString('base64') } });
@@ -1057,7 +1063,7 @@ async function deepVerifyOne(client, model, productImg, item) {
   }
 }
 
-async function runVerify(client, model, productImg, items, socketId, deep, deepOnly = false) {
+async function runVerify(client, model, productImgs, items, socketId, deep, deepOnly = false) {
   const verdicts = new Map();
   const report = (item, v, stage) => {
     verdicts.set(item.id, v.verdict);
@@ -1082,7 +1088,7 @@ async function runVerify(client, model, productImg, items, socketId, deep, deepO
       }
     }
     if (!withImages.length) continue;
-    const content = [productImg, { type: 'text', text: VERIFY_PROMPT_INTRO }];
+    const content = [...productImgs, { type: 'text', text: verifyPromptIntro(productImgs.length) }];
     withImages.forEach(({ item }, i) => {
       content.push({ type: 'text', text: `${i + 1}) id=${item.id}` });
       content.push(withImages[i].img);
@@ -1102,7 +1108,7 @@ async function runVerify(client, model, productImg, items, socketId, deep, deepO
     for (const item of unsure) {
       emit(socketId, 'verify:item', { id: item.id, verdict: 'checking', stage: 'deep' });
       try {
-        report(item, await deepVerifyOne(client, model, productImg, item), 'deep');
+        report(item, await deepVerifyOne(client, model, productImgs, item), 'deep');
       } catch {
         report(item, { verdict: 'unsure', reason: 'تعذّر الفحص العميق.' }, 'deep');
       }
@@ -1122,18 +1128,18 @@ app.post('/api/ai/verify', (req, res) => {
   const client = getAnthropicClient();
   if (!client) return res.status(400).json({ error: 'اربط مفتاح Claude من الإعدادات أولاً.' });
 
-  const { imageBase64, mediaType = 'image/jpeg', cards, socketId, deep = true, deepOnly = false } = req.body || {};
-  if (!imageBase64) return res.status(400).json({ error: 'لم يتم إرسال صورة المنتج.' });
-  if (imageBase64.length > VERIFY_IMG_B64_MAX) return res.status(400).json({ error: 'صورة المنتج أكبر من المسموح.' });
+  const { cards, socketId, deep = true, deepOnly = false } = req.body || {};
+  const refImages = normalizeRefImages(req.body);
+  if (!refImages.length) return res.status(400).json({ error: 'لم يتم إرسال صورة المنتج.' });
   const items = (Array.isArray(cards) ? cards : []).slice(0, VERIFY_MAX_CARDS)
     .map(cardToVerifyItem).filter(Boolean);
   if (!items.length) return res.status(400).json({ error: 'لا توجد نتائج للتحقق منها.' });
 
   const model = CONFIG.anthropicModel || 'claude-opus-4-8';
-  const productImg = productImageBlock(imageBase64, mediaType);
-  res.json({ started: true, count: items.length });
+  const productImgs = productImageBlocks(refImages);
+  res.json({ started: true, count: items.length, refImages: refImages.length });
 
-  runVerify(client, model, productImg, items, socketId, deep === false ? false : true, deepOnly === true)
+  runVerify(client, model, productImgs, items, socketId, deep === false ? false : true, deepOnly === true)
     .catch((e) => emit(socketId, 'verify:error', { message: e.message || 'فشل التحقق.' }));
 });
 

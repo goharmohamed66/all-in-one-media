@@ -13,7 +13,7 @@ const state = {
   keywords: [],         // search keyword chips
   sortMode: 'default',  // 'default' | 'views'
   autoDownloadIncoming: false, // auto-download streamed list items (multi-link)
-  productImage: null,   // {base64, mediaType} — kept after image search for verification
+  productImages: [],    // [{base64, mediaType}] — reference photos for verification (max 4)
   verdicts: new Map(),  // card id -> {verdict:'match'|'no_match'|'unsure'|'checking', reason}
   matchFilter: 'all',   // 'all' | 'match'
   verifying: false,
@@ -357,7 +357,14 @@ function updateResultsCount() {
 }
 function updateVerifyBtn() {
   const b = $('#btnVerify');
-  if (b) b.hidden = !(state.productImage && state.results.length && !state.verifying);
+  if (b) b.hidden = !(state.productImages.length && state.results.length && !state.verifying);
+  const rb = $('#btnRefImages');
+  if (rb) {
+    rb.hidden = !state.results.length;
+    rb.querySelector('span').textContent = state.productImages.length || '';
+  }
+  const rc = $('#btnRefClear');
+  if (rc) rc.hidden = !(state.results.length && state.productImages.length);
 }
 
 function buildCard(card, idx) {
@@ -476,11 +483,32 @@ $('#sortSelect').addEventListener('change', (e) => {
   renderAll();
 });
 
-// ── visual verification (product image vs results) ──
+// ── visual verification (product images vs results) ──
 const VERIFY_MAX_UI = 24;
+const REF_IMAGES_MAX_UI = 4;
+
+// read picked files into state.productImages (base64), capped
+async function addRefImageFiles(files) {
+  for (const file of Array.from(files || [])) {
+    if (state.productImages.length >= REF_IMAGES_MAX_UI) {
+      toast(`أقصى عدد صور مرجعية: ${REF_IMAGES_MAX_UI}.`, '');
+      break;
+    }
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(file);
+    });
+    const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+    if (m) state.productImages.push({ base64: m[2], mediaType: m[1] });
+  }
+  updateVerifyBtn();
+  if (state.productImages.length) toast(`صور المنتج المرجعية: ${state.productImages.length}.`, 'success');
+}
 
 async function startVerify(cards, { deep = true, single = false, deepOnly = false } = {}) {
-  if (!state.productImage) return toast('ارفع صورة المنتج أولاً بزر «بحث بصورة».', 'error');
+  if (!state.productImages.length) return toast('أضف صورة المنتج أولاً بزر «صور المنتج» أو «بحث بصورة».', 'error');
   if (!cards.length) return toast('لا توجد نتائج للتحقق منها.', 'error');
   if (state.verifying) return toast('التحقق شغال بالفعل…', '');
 
@@ -493,8 +521,7 @@ async function startVerify(cards, { deep = true, single = false, deepOnly = fals
     const r = await fetch('/api/ai/verify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        imageBase64: state.productImage.base64,
-        mediaType: state.productImage.mediaType,
+        images: state.productImages,
         cards: cards.map((c) => ({
           id: c.id, platform: c.platform, url: c.url,
           title: c.title, thumbnail: c.thumbnail, duration: c.duration,
@@ -522,6 +549,18 @@ async function startVerify(cards, { deep = true, single = false, deepOnly = fals
 $('#btnVerify').addEventListener('click', () => {
   const cards = displayOrder().map((i) => state.results[i]).slice(0, VERIFY_MAX_UI);
   startVerify(cards, { deep: true });
+});
+
+$('#btnRefImages').addEventListener('click', () => $('#refImagesInput').click());
+$('#refImagesInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  e.target.value = '';
+  await addRefImageFiles(files);
+});
+$('#btnRefClear').addEventListener('click', () => {
+  state.productImages = [];
+  updateVerifyBtn();
+  toast('تم مسح الصور المرجعية.', '');
 });
 
 $('#matchFilter').addEventListener('change', (e) => {
@@ -878,9 +917,11 @@ $('#imageFileInput').addEventListener('change', async (e) => {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'فشل تحليل الصورة.');
     if (!data.keywords || !data.keywords.length) { toast('لم يتم استخراج كلمات من الصورة.', ''); return; }
-    // keep the image so results can be visually verified against it later
-    state.productImage = { base64: m[2], mediaType: m[1] };
-    updateVerifyBtn();
+    // seed the verification references with this image if none were added yet
+    if (!state.productImages.length) {
+      state.productImages.push({ base64: m[2], mediaType: m[1] });
+      updateVerifyBtn();
+    }
     data.keywords.forEach((kw) => addKeyword(kw));
     const desc = data.product ? `${data.product} · ` : '';
     toast(`${desc}تم توليد ${data.keywords.length} كلمة (إنجليزي/عربي/صيني) — عدّلها ثم اضغط Search.`, 'success');

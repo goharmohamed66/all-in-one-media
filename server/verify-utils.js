@@ -99,12 +99,38 @@ function cardToVerifyItem(card) {
   };
 }
 
+const REF_IMAGE_MAX = 4;
+const REF_IMAGE_B64_MAX = 11 * 1024 * 1024; // ~8MB binary once decoded
+const REF_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+/**
+ * Normalize the request's reference image(s) into a validated array.
+ * Accepts the new `images: [{base64, mediaType}]` shape and the legacy
+ * single `imageBase64`/`mediaType` pair. Caps count, size and media type.
+ */
+function normalizeRefImages(body) {
+  const raw = [];
+  if (body && Array.isArray(body.images)) raw.push(...body.images);
+  if (body && body.imageBase64) raw.push({ base64: body.imageBase64, mediaType: body.mediaType });
+  const out = [];
+  for (const img of raw) {
+    if (out.length >= REF_IMAGE_MAX) break;
+    const base64 = img && typeof img.base64 === 'string' ? img.base64 : '';
+    if (!base64 || base64.length > REF_IMAGE_B64_MAX) continue;
+    const mediaType = REF_MEDIA_TYPES.includes(img.mediaType) ? img.mediaType : 'image/jpeg';
+    out.push({ base64, mediaType });
+  }
+  return out;
+}
+
 module.exports = {
   VERDICTS,
   VERIFY_SCHEMA,
+  REF_IMAGE_MAX,
   chunk,
   isAllowedThumbUrl,
   normalizeVerdict,
   parseVerdictResults,
   cardToVerifyItem,
+  normalizeRefImages,
 };

@@ -7,6 +7,7 @@ const {
   normalizeVerdict,
   parseVerdictResults,
   cardToVerifyItem,
+  normalizeRefImages,
   VERIFY_SCHEMA,
 } = verifyUtils;
 
@@ -115,6 +116,28 @@ describe('cardToVerifyItem', () => {
     expect(cardToVerifyItem({ id: '../../etc' }).id).toBe('etc');
     expect(cardToVerifyItem({ id: 'a/b\\c..d' }).id).toBe('abcd');
     expect(cardToVerifyItem({ id: '../..' })).toBe(null);
+  });
+});
+
+describe('normalizeRefImages', () => {
+  it('accepts the images array shape', () => {
+    const out = normalizeRefImages({ images: [{ base64: 'aaa', mediaType: 'image/png' }] });
+    expect(out).toEqual([{ base64: 'aaa', mediaType: 'image/png' }]);
+  });
+  it('accepts the legacy single-image shape', () => {
+    const out = normalizeRefImages({ imageBase64: 'bbb', mediaType: 'image/jpeg' });
+    expect(out).toEqual([{ base64: 'bbb', mediaType: 'image/jpeg' }]);
+  });
+  it('caps to 4 images and drops empties', () => {
+    const images = [1, 2, 3, 4, 5, 6].map((i) => ({ base64: 'img' + i, mediaType: 'image/jpeg' }));
+    images.push({ base64: '', mediaType: 'image/jpeg' });
+    expect(normalizeRefImages({ images }).length).toBe(4);
+    expect(normalizeRefImages({})).toEqual([]);
+    expect(normalizeRefImages(null)).toEqual([]);
+  });
+  it('falls back to jpeg for unknown media types', () => {
+    const out = normalizeRefImages({ images: [{ base64: 'x', mediaType: 'application/evil' }] });
+    expect(out[0].mediaType).toBe('image/jpeg');
   });
 });
 
