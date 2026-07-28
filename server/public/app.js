@@ -402,6 +402,14 @@ function buildCard(card, idx) {
       </div>
     </div>`;
 
+  // hover preview: play the video (with sound) inside the thumb
+  const previewSrc = (card.play || card.hdplay) ? proxy(card.play || card.hdplay) : '';
+  if (previewSrc) {
+    const thumbEl = c.querySelector('.card-thumb');
+    thumbEl.addEventListener('mouseenter', () => startPreview(thumbEl, previewSrc));
+    thumbEl.addEventListener('mouseleave', stopPreview);
+  }
+
   c.querySelector('.card-check').addEventListener('click', () => toggleSelect(idx, c));
   c.querySelector('.act-dl').addEventListener('click', () => startDownload(card, 'video'));
   c.querySelector('.act-mp3').addEventListener('click', () => startDownload(card, 'mp3'));
@@ -427,6 +435,38 @@ function verdictBadgeHtml(card) {
   return `<div class="card-verdict ${cls[v.verdict]}" title="${esc(v.reason || '')}">${labels[v.verdict]}</div>`;
 }
 
+// ── hover preview (one at a time; created on enter, torn down on leave) ──
+let _previewEl = null;
+let _previewTimer = null;
+
+function stopPreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = null;
+  if (_previewEl) {
+    try { _previewEl.pause(); } catch {}
+    _previewEl.removeAttribute('src');
+    _previewEl.remove();
+    _previewEl = null;
+  }
+}
+
+function startPreview(thumbEl, src) {
+  stopPreview();
+  // small delay so skimming the grid doesn't spawn players
+  _previewTimer = setTimeout(() => {
+    const v = document.createElement('video');
+    v.className = 'card-preview';
+    v.src = src;
+    v.loop = true;
+    v.playsInline = true;
+    v.volume = 0.85;
+    v.addEventListener('error', () => { if (_previewEl === v) stopPreview(); });
+    thumbEl.appendChild(v);
+    _previewEl = v;
+    v.play().catch(() => {}); // if autoplay-with-sound is blocked, stay on the thumbnail
+  }, 180);
+}
+
 // display order: insertion order, or by views (desc) when sorting is on
 function displayOrder() {
   let idxs = state.results.map((_, i) => i);
@@ -442,6 +482,7 @@ function displayOrder() {
   return idxs;
 }
 function renderAll() {
+  stopPreview(); // a detached <video> would keep playing audio otherwise
   const grid = $('#resultsGrid');
   grid.innerHTML = '';
   displayOrder().forEach((i) => grid.appendChild(buildCard(state.results[i], i)));

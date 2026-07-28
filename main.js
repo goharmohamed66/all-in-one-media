@@ -403,6 +403,9 @@ function setupAutoUpdates() {
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 3 * 60 * 60 * 1000);
 }
 
+// hover previews start with sound — allow autoplay without a prior click
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 app.whenReady().then(async () => {
   try {
     await startServer();
