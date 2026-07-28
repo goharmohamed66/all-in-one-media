@@ -927,8 +927,10 @@ app.post('/api/ai/keywords', async (req, res) => {
     `(e.g. "<brand> <name> review", "<name> unboxing", "<brand> <name> original vs fake") — ` +
     `no generic descriptors like "black perfume bottle".\n` +
     `- "english": EXACTLY 7 phrases, each built around the exact printed name\n` +
-    `- "arabic": EXACTLY 4 phrases — Arabic wording around the exact name (keep the product name in ` +
-    `Latin letters exactly as printed, e.g. "عطر <name> الأصلي")\n` +
+    `- "arabic": EXACTLY 4 genuinely-Arabic phrases: 2 with the printed Latin name inside Arabic ` +
+    `wording (e.g. "عطر <name> الأصلي") AND 2 with the common ARABIC TRANSLITERATION of the ` +
+    `brand/name as Arab TikTok users would type it (e.g. "افنان" for Afnan) — Arab creators often ` +
+    `write the name in Arabic letters, so both spellings are needed\n` +
     `- "chinese": EXACTLY 3 Chinese (Simplified) phrases — same rule, keep the printed name verbatim\n` +
     `- "product": one line = the exact identity as printed (brand + name + variant).\n` +
     `ONLY if no brand or name text is readable anywhere: fall back to the most precise descriptors ` +
