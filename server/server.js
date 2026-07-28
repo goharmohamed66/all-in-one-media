@@ -900,7 +900,7 @@ app.post('/api/ai/disconnect', (req, res) => {
 const KEYWORDS_SCHEMA = {
   type: 'object',
   properties: {
-    product: { type: 'string', description: 'Short description of the product (type, brand, key attributes)' },
+    product: { type: 'string', description: 'The EXACT product identity as printed on it: brand + product name + variant/edition' },
     english: { type: 'array', items: { type: 'string' }, description: 'Exactly 7 English search phrases' },
     arabic: { type: 'array', items: { type: 'string' }, description: 'Exactly 4 Arabic search phrases' },
     chinese: { type: 'array', items: { type: 'string' }, description: 'Exactly 3 Chinese search phrases' },
@@ -919,14 +919,20 @@ app.post('/api/ai/keywords', async (req, res) => {
 
   const model = CONFIG.anthropicModel || 'claude-opus-4-8';
   const prompt =
-    `Analyze this product image carefully. Identify the product type, brand (if visible), ` +
-    `color, material, and key features, plus any visible text/logos. ` +
-    `Then produce search phrases to find videos of this exact product on ${platform}:\n` +
-    `- "english": EXACTLY 7 English phrases (2-4 words each)\n` +
-    `- "arabic": EXACTLY 4 Arabic phrases\n` +
-    `- "chinese": EXACTLY 3 Chinese (Simplified) phrases\n` +
-    `- "product": a one-line description of the product.\n` +
-    `Make the phrases specific and varied (product type + brand + key attribute). No hashtags, no numbering.`;
+    `STEP 1 — Identify the product EXACTLY. Read carefully every piece of text printed on the ` +
+    `product and its packaging: brand, product name, variant/edition, size. Zoom into labels, ` +
+    `logos and embossed text. The goal is the exact identity as written on the box — not a description.\n\n` +
+    `STEP 2 — Generate search phrases to find videos of THIS EXACT product on ${platform}. ` +
+    `When you identified a brand/product name, EVERY phrase MUST contain that exact name verbatim ` +
+    `(e.g. "<brand> <name> review", "<name> unboxing", "<brand> <name> original vs fake") — ` +
+    `no generic descriptors like "black perfume bottle".\n` +
+    `- "english": EXACTLY 7 phrases, each built around the exact printed name\n` +
+    `- "arabic": EXACTLY 4 phrases — Arabic wording around the exact name (keep the product name in ` +
+    `Latin letters exactly as printed, e.g. "عطر <name> الأصلي")\n` +
+    `- "chinese": EXACTLY 3 Chinese (Simplified) phrases — same rule, keep the printed name verbatim\n` +
+    `- "product": one line = the exact identity as printed (brand + name + variant).\n` +
+    `ONLY if no brand or name text is readable anywhere: fall back to the most precise descriptors ` +
+    `possible (type + color + shape + any partial visible text). No hashtags, no numbering.`;
 
   try {
     const r = await client.messages.create({
