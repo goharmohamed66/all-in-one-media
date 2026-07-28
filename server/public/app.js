@@ -965,7 +965,8 @@ $('#imageFileInput').addEventListener('change', async (e) => {
     }
     data.keywords.forEach((kw) => addKeyword(kw));
     const desc = data.product ? `${data.product} · ` : '';
-    toast(`${desc}تم توليد ${data.keywords.length} كلمة (إنجليزي/عربي/صيني) — عدّلها ثم اضغط Search.`, 'success');
+    toast(`${desc}تم توليد ${data.keywords.length} كلمة — جاري البحث تلقائياً…`, 'success');
+    doSearch(); // one step: image → keywords → search starts on its own
   } catch (err) {
     toast(err.message, 'error');
   } finally {
