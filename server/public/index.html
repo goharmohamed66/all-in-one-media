@@ -124,6 +124,13 @@
         <span class="count-badge" id="resultsCount">0 عنصر</span>
       </div>
       <div class="results-actions">
+        <button class="btn ghost sm" id="btnVerify" hidden title="كلود يقارن كل نتيجة بصورة المنتج ويعلّم المطابق">
+          ✨ تحقق من المطابقة
+        </button>
+        <select id="matchFilter" class="sort-select" hidden title="فلترة نتائج التحقق">
+          <option value="all">الكل</option>
+          <option value="match">المطابق فقط</option>
+        </select>
         <select id="sortSelect" class="sort-select" title="ترتيب النتائج">
           <option value="default">ترتيب: الافتراضي</option>
           <option value="views">الأكثر مشاهدة</option>

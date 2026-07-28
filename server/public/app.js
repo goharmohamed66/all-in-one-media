@@ -13,6 +13,10 @@ const state = {
   keywords: [],         // search keyword chips
   sortMode: 'default',  // 'default' | 'views'
   autoDownloadIncoming: false, // auto-download streamed list items (multi-link)
+  productImage: null,   // {base64, mediaType} — kept after image search for verification
+  verdicts: new Map(),  // card id -> {verdict:'match'|'no_match'|'unsure'|'checking', reason}
+  matchFilter: 'all',   // 'all' | 'match'
+  verifying: false,
 };
 
 // ── helpers ──
@@ -339,12 +343,21 @@ function showResults() { $('#resultsPanel').hidden = false; }
 function clearResults() {
   state.results = [];
   state.selected.clear();
+  state.verdicts.clear();
+  state.matchFilter = 'all';
+  $('#matchFilter').value = 'all';
+  $('#matchFilter').hidden = true;
   $('#resultsGrid').innerHTML = '';
   updateResultsCount();
 }
 function updateResultsCount() {
   $('#resultsCount').textContent = `${state.results.length} عنصر`;
   $('#selCount').textContent = state.selected.size;
+  updateVerifyBtn();
+}
+function updateVerifyBtn() {
+  const b = $('#btnVerify');
+  if (b) b.hidden = !(state.productImage && state.results.length && !state.verifying);
 }
 
 function buildCard(card, idx) {
@@ -370,6 +383,7 @@ function buildCard(card, idx) {
       <div class="card-check"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
       <div class="card-platform ${card.platform || 'tiktok'}">${platformIcons[card.platform] || ''}</div>
       ${card.duration ? `<div class="card-dur">${fmtDur(card.duration)}</div>` : ''}
+      ${verdictBadgeHtml(card)}
     </div>
     <div class="card-body">
       <div class="card-title">${esc(card.title)}</div>
@@ -385,12 +399,36 @@ function buildCard(card, idx) {
   c.querySelector('.act-dl').addEventListener('click', () => startDownload(card, 'video'));
   c.querySelector('.act-mp3').addEventListener('click', () => startDownload(card, 'mp3'));
   c.querySelector('.act-info').addEventListener('click', () => showInfo(card));
+  // "unsure" and "no match" badges are clickable → manual deep re-check (frames)
+  const badge = c.querySelector('.card-verdict.v-unsure, .card-verdict.v-nomatch');
+  if (badge) badge.addEventListener('click', () => startVerify([card], { deep: true, single: true, deepOnly: true }));
   return c;
+}
+
+// verdict badge (labels are fixed strings; reason is escaped into the tooltip)
+function verdictBadgeHtml(card) {
+  const v = state.verdicts.get(String(card.id));
+  if (!v) return '';
+  const labels = {
+    match: 'مطابق ✓',
+    no_match: 'غير مطابق — إعادة فحص؟',
+    unsure: 'غير متأكد — فحص عميق؟',
+    checking: '⏳ جاري الفحص…',
+  };
+  const cls = { match: 'v-match', no_match: 'v-nomatch', unsure: 'v-unsure', checking: 'v-checking' };
+  if (!labels[v.verdict]) return '';
+  return `<div class="card-verdict ${cls[v.verdict]}" title="${esc(v.reason || '')}">${labels[v.verdict]}</div>`;
 }
 
 // display order: insertion order, or by views (desc) when sorting is on
 function displayOrder() {
-  const idxs = state.results.map((_, i) => i);
+  let idxs = state.results.map((_, i) => i);
+  if (state.matchFilter === 'match') {
+    idxs = idxs.filter((i) => {
+      const v = state.verdicts.get(String(state.results[i].id));
+      return v && v.verdict === 'match';
+    });
+  }
   if (state.sortMode === 'views') {
     idxs.sort((a, b) => (state.results[b].views || 0) - (state.results[a].views || 0));
   }
@@ -408,8 +446,8 @@ function scheduleRender() { clearTimeout(_renderTimer); _renderTimer = setTimeou
 function addResultCard(card) {
   const idx = state.results.length;
   state.results.push(card);
-  if (state.sortMode === 'views') {
-    scheduleRender(); // re-sort as items stream in
+  if (state.sortMode === 'views' || state.matchFilter !== 'all') {
+    scheduleRender(); // re-sort / re-filter as items stream in
   } else {
     $('#resultsGrid').appendChild(buildCard(card, idx));
     updateResultsCount();
@@ -436,6 +474,76 @@ function showInfo(card) {
 $('#sortSelect').addEventListener('change', (e) => {
   state.sortMode = e.target.value;
   renderAll();
+});
+
+// ── visual verification (product image vs results) ──
+const VERIFY_MAX_UI = 24;
+
+async function startVerify(cards, { deep = true, single = false, deepOnly = false } = {}) {
+  if (!state.productImage) return toast('ارفع صورة المنتج أولاً بزر «بحث بصورة».', 'error');
+  if (!cards.length) return toast('لا توجد نتائج للتحقق منها.', 'error');
+  if (state.verifying) return toast('التحقق شغال بالفعل…', '');
+
+  state.verifying = true;
+  updateVerifyBtn();
+  cards.forEach((c) => state.verdicts.set(String(c.id), { verdict: 'checking', reason: '' }));
+  scheduleRender();
+
+  try {
+    const r = await fetch('/api/ai/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64: state.productImage.base64,
+        mediaType: state.productImage.mediaType,
+        cards: cards.map((c) => ({
+          id: c.id, platform: c.platform, url: c.url,
+          title: c.title, thumbnail: c.thumbnail, duration: c.duration,
+        })),
+        deep,
+        deepOnly,
+        socketId: SOCKET_ID,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'فشل بدء التحقق.');
+    if (!single) toast(`بدأ التحقق من ${data.count} فيديو…`, '');
+  } catch (e) {
+    state.verifying = false;
+    cards.forEach((c) => {
+      const v = state.verdicts.get(String(c.id));
+      if (v && v.verdict === 'checking') state.verdicts.delete(String(c.id));
+    });
+    updateVerifyBtn();
+    scheduleRender();
+    toast(e.message, 'error');
+  }
+}
+
+$('#btnVerify').addEventListener('click', () => {
+  const cards = displayOrder().map((i) => state.results[i]).slice(0, VERIFY_MAX_UI);
+  startVerify(cards, { deep: true });
+});
+
+$('#matchFilter').addEventListener('change', (e) => {
+  state.matchFilter = e.target.value;
+  renderAll();
+});
+
+socket.on('verify:item', ({ id, verdict, reason, stage }) => {
+  state.verdicts.set(String(id), { verdict, reason: reason || '', stage });
+  scheduleRender();
+});
+socket.on('verify:done', ({ counts }) => {
+  state.verifying = false;
+  updateVerifyBtn();
+  $('#matchFilter').hidden = false;
+  const c = counts || {};
+  toast(`خلص التحقق — مطابق: ${c.match || 0} · غير مطابق: ${c.no_match || 0} · غير متأكد: ${c.unsure || 0}`, 'success');
+});
+socket.on('verify:error', ({ message }) => {
+  state.verifying = false;
+  updateVerifyBtn();
+  toast(message || 'فشل التحقق.', 'error');
 });
 
 // ── results bulk actions ──
@@ -770,6 +878,9 @@ $('#imageFileInput').addEventListener('change', async (e) => {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'فشل تحليل الصورة.');
     if (!data.keywords || !data.keywords.length) { toast('لم يتم استخراج كلمات من الصورة.', ''); return; }
+    // keep the image so results can be visually verified against it later
+    state.productImage = { base64: m[2], mediaType: m[1] };
+    updateVerifyBtn();
     data.keywords.forEach((kw) => addKeyword(kw));
     const desc = data.product ? `${data.product} · ` : '';
     toast(`${desc}تم توليد ${data.keywords.length} كلمة (إنجليزي/عربي/صيني) — عدّلها ثم اضغط Search.`, 'success');

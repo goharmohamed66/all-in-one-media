@@ -958,6 +958,185 @@ app.post('/api/ai/keywords', async (req, res) => {
   }
 });
 
+// ───────────────────── visual product-match verification ─────────────────────
+const {
+  VERIFY_SCHEMA,
+  chunk: verifyChunk,
+  isAllowedThumbUrl,
+  parseVerdictResults,
+  cardToVerifyItem,
+} = require('./verify-utils');
+
+const VERIFY_MAX_CARDS = 24;   // per request
+const VERIFY_BATCH = 8;        // thumbnails per Claude call
+const VERIFY_DEEP_MAX = 6;     // auto deep-checks per request
+const VERIFY_DEEP_FRAMES = 6;  // frames per deep check
+const VERIFY_IMG_B64_MAX = 11 * 1024 * 1024; // ~8MB binary once decoded
+
+// fetch a thumbnail (allowlisted host only) and return it as a base64 image block
+async function fetchThumbBase64(url) {
+  const host = new URL(url).hostname.toLowerCase();
+  const headers = { 'User-Agent': YTDLP_UA, 'Accept': 'image/*' };
+  const ref = refererForHost(host);
+  if (ref) headers.Referer = ref;
+  const r = await httpRequest(url, { headers, timeout: 20000 });
+  if (r.status !== 200 || !r.body || !r.body.length) throw new Error(`thumb HTTP ${r.status}`);
+  if (r.body.length > 6 * 1024 * 1024) throw new Error('thumb too large');
+  const ct = (r.headers['content-type'] || '').toLowerCase();
+  const mediaType = ct.includes('png') ? 'image/png' : ct.includes('webp') ? 'image/webp' : 'image/jpeg';
+  return { type: 'image', source: { type: 'base64', media_type: mediaType, data: r.body.toString('base64') } };
+}
+
+// uniform-sample n frames from a local video with the bundled ffmpeg
+function extractFrames(videoPath, outDir, n, durationSec) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(outDir, { recursive: true });
+    const dur = Math.max(1, durationSec || 30);
+    const fps = Math.min(2, Math.max(0.05, n / dur));
+    const proc = spawn(FFMPEG_PATH, [
+      '-y', '-i', videoPath,
+      '-vf', `fps=${fps},scale=512:-2`,
+      '-frames:v', String(n),
+      path.join(outDir, 'f_%02d.jpg'),
+    ], { windowsHide: true });
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error('فشل استخراج الفريمات (ffmpeg).'));
+      const frames = fs.readdirSync(outDir).filter((f) => f.endsWith('.jpg'))
+        .sort().map((f) => path.join(outDir, f));
+      if (!frames.length) return reject(new Error('لا توجد فريمات.'));
+      resolve(frames);
+    });
+  });
+}
+
+function productImageBlock(imageBase64, mediaType) {
+  return { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } };
+}
+
+const VERIFY_PROMPT_INTRO =
+  'The FIRST image is the reference product. Each numbered image after it is a video ' +
+  'thumbnail/frame labeled with its id. For each id decide if the video shows the EXACT ' +
+  'same product (same model, color, packaging/label — not just a similar item). ' +
+  'Be strict: variants of the same brand (different edition, color or label text) are no_match. ' +
+  'If the image is too unclear or the product is not visible, answer unsure.';
+
+async function claudeVerdicts(client, model, contentBlocks, expectedIds) {
+  const r = await client.messages.create({
+    model,
+    max_tokens: 1500,
+    thinking: { type: 'disabled' },
+    output_config: { format: { type: 'json_schema', schema: VERIFY_SCHEMA } },
+    messages: [{ role: 'user', content: contentBlocks }],
+  });
+  const textBlock = (r.content || []).find((b) => b.type === 'text');
+  return parseVerdictResults(textBlock ? textBlock.text : '', expectedIds);
+}
+
+// deep check: download the TikTok video to a temp dir, sample frames, ask again
+async function deepVerifyOne(client, model, productImg, item) {
+  const workDir = path.join(os.tmpdir(), 'mediagrab-verify', String(item.id));
+  try {
+    let play = '';
+    const v = await tikwmGetVideo(item.url);
+    play = v.hdplay || v.play;
+    if (!play) throw new Error('لا يوجد رابط فيديو.');
+    fs.mkdirSync(workDir, { recursive: true });
+    // 'verify:silent' is an empty socket room → progress events go nowhere
+    const videoPath = await downloadFile(play, path.join(workDir, 'video'), `verify_${item.id}`, 'verify:silent');
+    const frames = await extractFrames(videoPath, path.join(workDir, 'frames'), VERIFY_DEEP_FRAMES, item.duration);
+    const content = [productImg, { type: 'text', text: VERIFY_PROMPT_INTRO }];
+    content.push({ type: 'text', text: `id=${item.id} — the following ${frames.length} images are frames from ONE video:` });
+    for (const f of frames) {
+      content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: fs.readFileSync(f).toString('base64') } });
+    }
+    const map = await claudeVerdicts(client, model, content, [item.id]);
+    return map.get(item.id) || { verdict: 'unsure', reason: '' };
+  } finally {
+    fs.rm(workDir, { recursive: true, force: true }, () => {});
+  }
+}
+
+async function runVerify(client, model, productImg, items, socketId, deep, deepOnly = false) {
+  const verdicts = new Map();
+  const report = (item, v, stage) => {
+    verdicts.set(item.id, v.verdict);
+    emit(socketId, 'verify:item', { id: item.id, verdict: v.verdict, reason: v.reason || '', stage });
+  };
+
+  // deepOnly (manual re-check) skips the thumbnail stage entirely
+  if (deepOnly) items.forEach((it) => verdicts.set(it.id, 'unsure'));
+
+  // stage 1 — thumbnails, in sequential batches
+  for (const batch of deepOnly ? [] : verifyChunk(items, VERIFY_BATCH)) {
+    const withImages = [];
+    for (const item of batch) {
+      if (!isAllowedThumbUrl(item.thumbnail, PROXY_ALLOW)) {
+        report(item, { verdict: 'unsure', reason: 'لا توجد صورة مصغرة صالحة.' }, 'thumb');
+        continue;
+      }
+      try {
+        withImages.push({ item, img: await fetchThumbBase64(item.thumbnail) });
+      } catch {
+        report(item, { verdict: 'unsure', reason: 'تعذّر جلب الصورة المصغرة.' }, 'thumb');
+      }
+    }
+    if (!withImages.length) continue;
+    const content = [productImg, { type: 'text', text: VERIFY_PROMPT_INTRO }];
+    withImages.forEach(({ item }, i) => {
+      content.push({ type: 'text', text: `${i + 1}) id=${item.id}` });
+      content.push(withImages[i].img);
+    });
+    try {
+      const map = await claudeVerdicts(client, model, content, withImages.map(({ item }) => item.id));
+      for (const { item } of withImages) report(item, map.get(item.id), 'thumb');
+    } catch (e) {
+      for (const { item } of withImages) report(item, { verdict: 'unsure', reason: 'فشل نداء التحقق.' }, 'thumb');
+    }
+  }
+
+  // stage 2 — deep frames for unsure TikTok results (capped)
+  if (deep) {
+    const unsure = items.filter((it) => verdicts.get(it.id) === 'unsure' && it.platform === 'tiktok' && it.url)
+      .slice(0, VERIFY_DEEP_MAX);
+    for (const item of unsure) {
+      emit(socketId, 'verify:item', { id: item.id, verdict: 'checking', stage: 'deep' });
+      try {
+        report(item, await deepVerifyOne(client, model, productImg, item), 'deep');
+      } catch {
+        report(item, { verdict: 'unsure', reason: 'تعذّر الفحص العميق.' }, 'deep');
+      }
+    }
+  }
+
+  const counts = { match: 0, no_match: 0, unsure: 0 };
+  for (const v of verdicts.values()) counts[v] = (counts[v] || 0) + 1;
+  emit(socketId, 'verify:done', { counts });
+}
+
+/**
+ * POST /api/ai/verify  { imageBase64, mediaType, cards[], socketId, deep? }
+ * Streams verify:item / verify:done / verify:error over the socket.
+ */
+app.post('/api/ai/verify', (req, res) => {
+  const client = getAnthropicClient();
+  if (!client) return res.status(400).json({ error: 'اربط مفتاح Claude من الإعدادات أولاً.' });
+
+  const { imageBase64, mediaType = 'image/jpeg', cards, socketId, deep = true, deepOnly = false } = req.body || {};
+  if (!imageBase64) return res.status(400).json({ error: 'لم يتم إرسال صورة المنتج.' });
+  if (imageBase64.length > VERIFY_IMG_B64_MAX) return res.status(400).json({ error: 'صورة المنتج أكبر من المسموح.' });
+  const items = (Array.isArray(cards) ? cards : []).slice(0, VERIFY_MAX_CARDS)
+    .map(cardToVerifyItem).filter(Boolean);
+  if (!items.length) return res.status(400).json({ error: 'لا توجد نتائج للتحقق منها.' });
+
+  const model = CONFIG.anthropicModel || 'claude-opus-4-8';
+  const productImg = productImageBlock(imageBase64, mediaType);
+  res.json({ started: true, count: items.length });
+
+  runVerify(client, model, productImg, items, socketId, deep === false ? false : true, deepOnly === true)
+    .catch((e) => emit(socketId, 'verify:error', { message: e.message || 'فشل التحقق.' }));
+});
+
 /**
  * POST /api/info  { url, socketId }
  * - single video → returns { type:'video', items:[card] }
