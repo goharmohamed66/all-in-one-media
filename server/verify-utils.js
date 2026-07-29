@@ -40,14 +40,21 @@ function chunk(arr, size) {
   return out;
 }
 
-// http(s) URL whose hostname matches the media-proxy allowlist
-function isAllowedThumbUrl(u, allowHosts) {
+// strict allowlist match: the host must BE the domain or a subdomain of it.
+// Substring matching is forbidden here — `tiktok.evil.com` must never pass.
+function isAllowedHost(host, domains) {
+  const h = String(host || '').toLowerCase().replace(/\.$/, '');
+  if (!h) return false;
+  return (domains || []).some((d) => h === d || h.endsWith('.' + d));
+}
+
+// http(s) URL whose hostname matches the media allowlist (strict suffix match)
+function isAllowedThumbUrl(u, domains) {
   if (!u || typeof u !== 'string') return false;
   let parsed;
   try { parsed = new URL(u); } catch { return false; }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase();
-  return (allowHosts || []).some((h) => host.includes(h));
+  return isAllowedHost(parsed.hostname, domains);
 }
 
 // tolerate model wording drift: map any phrasing onto the 3 canonical verdicts
@@ -87,10 +94,12 @@ function parseVerdictResults(text, expectedIds) {
 // stay strictly alphanumeric — no path separators or dots ever.
 function cardToVerifyItem(card) {
   if (!card || typeof card !== 'object') return null;
-  const id = card.id != null ? String(card.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) : '';
+  const rawId = card.id != null ? String(card.id).slice(0, 200) : '';
+  const id = rawId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (!id) return null;
   return {
-    id,
+    id,          // path-safe — used for temp dirs only
+    rawId,       // exactly what the client sent — echoed back in verify:item
     platform: String(card.platform || 'tiktok').slice(0, 20),
     url: typeof card.url === 'string' ? card.url.slice(0, 500) : '',
     title: typeof card.title === 'string' ? card.title.slice(0, 120) : '',
@@ -128,6 +137,7 @@ module.exports = {
   VERIFY_SCHEMA,
   REF_IMAGE_MAX,
   chunk,
+  isAllowedHost,
   isAllowedThumbUrl,
   normalizeVerdict,
   parseVerdictResults,

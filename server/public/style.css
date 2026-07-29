@@ -143,7 +143,7 @@ body{
 .sort-select:focus{border-color:var(--accent)}
 
 .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-@media(max-width:720px){.results-grid{grid-template-columns:repeat(2,1fr)};.tabs{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.results-grid{grid-template-columns:repeat(2,1fr)}.tabs{grid-template-columns:repeat(2,1fr)}}
 
 .card{background:var(--bg2);border:1px solid var(--line);border-radius:14px;overflow:hidden;
   display:flex;flex-direction:column;transition:.16s;position:relative}
@@ -272,7 +272,7 @@ body{
 .modal-foot .btn{height:44px}
 
 /* ── toast ── */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+.toast{position:fixed;bottom:24px;left:50%;white-space:pre-line;transform:translateX(-50%) translateY(20px);
   background:#1b2138;border:1px solid var(--panel-border);color:var(--text);padding:13px 20px;border-radius:12px;
   font-size:13.5px;font-weight:600;box-shadow:0 12px 40px -10px #000;opacity:0;pointer-events:none;
   transition:.25s;z-index:100;max-width:90%}

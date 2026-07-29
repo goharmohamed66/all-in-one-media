@@ -5,6 +5,12 @@ const socket = io();
 let SOCKET_ID = null;
 let DOWNLOAD_DIR = '';
 
+// run-generation guard: every new search/fetch bumps RUN; socket events carry
+// the runId they belong to and stale ones are dropped instead of corrupting
+// the current results (double-search mixing, late verify badges, etc.)
+let RUN = 0;
+const isStale = (d) => d && d.runId && d.runId !== RUN;
+
 const state = {
   platform: 'tiktok',
   results: [],          // current cards
@@ -29,7 +35,7 @@ const el = (tag, cls, html) => {
   return e;
 };
 const proxy = (url) => url ? `/api/proxy/media?u=${encodeURIComponent(url)}` : '';
-const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function fmtDur(sec) {
   sec = Math.round(sec || 0);
@@ -38,6 +44,7 @@ function fmtDur(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 function fmtViews(n) {
+  n = Number(n) || 0; // remote JSON may send a string — never let it reach innerHTML raw
   if (!n) return '';
   if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.0', '') + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.0', '') + 'K';
@@ -58,31 +65,52 @@ socket.on('connect', () => {
   SOCKET_ID = socket.id;
   setConn('online', 'Connected');
 });
-socket.on('disconnect', () => setConn('offline', 'Disconnected'));
+socket.on('disconnect', () => {
+  setConn('offline', 'Disconnected');
+  // in-flight server jobs now emit into the void — unwedge the UI instead of
+  // hanging forever on a list/verify that will never finish
+  if (_listDone) { _listDone(0); _listDone = null; }
+  state.autoDownloadIncoming = false;
+  if (state.verifying) {
+    state.verifying = false;
+    clearCheckingVerdicts();
+    updateVerifyBtn();
+    toast('انقطع الاتصال أثناء التحقق — أعد المحاولة.', 'error');
+  }
+  $('#resultsLoading').hidden = true;
+  setBtnLoading('#btnSearch', false);
+});
 socket.on('ready', (d) => { SOCKET_ID = d.id; DOWNLOAD_DIR = d.downloadDir || ''; });
 
 let _listDone = null; // resolver used to await a streamed list (multi-link downloads)
 
-socket.on('list:item', ({ card }) => {
-  addResultCard(card);
-  if (state.autoDownloadIncoming) startDownload(card, 'video');
+socket.on('list:item', (d) => {
+  if (isStale(d)) return;
+  addResultCard(d.card);
+  if (state.autoDownloadIncoming) startDownload(d.card, 'video');
 });
-socket.on('list:status', ({ message }) => setSearchStatus(message || 'جاري الجلب…'));
-socket.on('list:done', ({ count, stale }) => {
+socket.on('list:status', (d) => { if (!isStale(d)) setSearchStatus(d.message || 'جاري الجلب…'); });
+socket.on('list:done', (d) => {
+  if (isStale(d)) return;
   $('#resultsLoading').hidden = true;
   setSearchStatus('جاري الجلب…');
   updateResultsCount();
-  if (stale) toast('عرض آخر نتيجة محفوظة (المنصة تحظر مؤقتاً).', 'error');
-  else toast(`تم جلب ${count} فيديو.`, 'success');
-  if (_listDone) { _listDone(count); _listDone = null; }
+  if (d.stale) toast('عرض آخر نتيجة محفوظة (المنصة تحظر مؤقتاً).', 'error');
+  else toast(`تم جلب ${d.count} فيديو.`, 'success');
+  if (_listDone) { _listDone(d.count); _listDone = null; }
 });
-socket.on('list:error', ({ message }) => {
+socket.on('list:error', (d) => {
+  if (isStale(d)) return;
   $('#resultsLoading').hidden = true;
-  toast(message || 'فشل الجلب.', 'error');
+  toast(d.message || 'فشل الجلب.', 'error');
   if (_listDone) { _listDone(0); _listDone = null; }
 });
 
-socket.on('progress', (d) => updateQueue(d));
+socket.on('progress', (d) => {
+  // 'starting' can beat the HTTP response that registers the queue row —
+  // retry once so a fast-failing download still shows its terminal state
+  if (!updateQueue(d)) setTimeout(() => updateQueue(d), 400);
+});
 
 // show the real app version in the header badge (updates with each release)
 fetch('/api/config').then((r) => r.json()).then((c) => {
@@ -147,6 +175,7 @@ async function fetchInfo(autoDownload = false) {
   if (!urls.length) return toast('الصق رابطاً واحداً على الأقل.', 'error');
 
   clearResults();
+  const runId = RUN;
   showResults();
   $('#resultsLoading').hidden = false;
   setBtnLoading('#btnInfo', true);
@@ -160,15 +189,19 @@ async function fetchInfo(autoDownload = false) {
       const r = await fetch('/api/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, socketId: SOCKET_ID }),
+        body: JSON.stringify({ url, socketId: SOCKET_ID, runId }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'فشل الجلب.');
 
       if (data.streaming) {
-        // playlist / channel / profile → items arrive via socket
+        // playlist / channel / profile → items arrive via socket.
+        // watchdog: a lost list:done must not freeze the buttons forever
         state.autoDownloadIncoming = autoDownload;
-        await new Promise((res) => { _listDone = res; });
+        await new Promise((res) => {
+          _listDone = res;
+          setTimeout(() => { if (_listDone === res) { _listDone = null; res(0); } }, 11 * 60 * 1000);
+        });
         state.autoDownloadIncoming = false;
       } else {
         (data.items || []).forEach(addResultCard);
@@ -252,6 +285,7 @@ async function doSearch() {
   const perKeyword = parseInt($('#searchDepth').value, 10) || 30;
 
   clearResults();
+  const runId = RUN;
   showResults();
   $('#resultsLoading').hidden = false;
   setBtnLoading('#btnSearch', true);
@@ -307,7 +341,7 @@ async function doSearch() {
     const r = await fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform: state.platform, keywords, perKeyword, socketId: SOCKET_ID }),
+      body: JSON.stringify({ platform: state.platform, keywords, perKeyword, socketId: SOCKET_ID, runId }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'فشل البحث.');
@@ -341,6 +375,12 @@ function setBtnLoading(sel, on) {
 // ── results rendering ──
 function showResults() { $('#resultsPanel').hidden = false; }
 function clearResults() {
+  RUN++; // everything still streaming for the old run is now stale
+  stopPreview(); // a detached <video> would keep playing audio otherwise
+  clearTimeout(_renderTimer);
+  if (_listDone) { _listDone(0); _listDone = null; }
+  state.autoDownloadIncoming = false;
+  state.verifying = false;
   state.results = [];
   state.selected.clear();
   state.verdicts.clear();
@@ -377,9 +417,10 @@ function buildCard(card, idx) {
 
   const c = el('div', 'card');
   c.dataset.idx = idx;
+  c.dataset.vid = String(card.id || '');
   if (state.selected.has(idx)) c.classList.add('selected');
-  const thumb = card.thumbnail ? `<img src="${proxy(card.thumbnail)}" loading="lazy" onerror="this.style.display='none';this.parentElement.querySelector('.ph')?.removeAttribute('hidden')">` : '';
-  const meta = [card.author && esc(card.author), card.views && (fmtViews(card.views) + ' مشاهدة')].filter(Boolean).join(' · ');
+  const thumb = card.thumbnail ? `<img src="${esc(proxy(card.thumbnail))}" loading="lazy" onerror="this.style.display='none';this.parentElement.querySelector('.ph')?.removeAttribute('hidden')">` : '';
+  const meta = [card.author && esc(card.author), card.views && esc(fmtViews(card.views) + ' مشاهدة')].filter(Boolean).join(' · ');
 
   c.innerHTML = `
     <div class="card-thumb">
@@ -388,7 +429,7 @@ function buildCard(card, idx) {
         <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </div>
       <div class="card-check"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
-      <div class="card-platform ${card.platform || 'tiktok'}">${platformIcons[card.platform] || ''}</div>
+      <div class="card-platform ${esc(card.platform || 'tiktok')}">${Object.prototype.hasOwnProperty.call(platformIcons, card.platform) ? platformIcons[card.platform] : ''}</div>
       ${card.duration ? `<div class="card-dur">${fmtDur(card.duration)}</div>` : ''}
       ${verdictBadgeHtml(card)}
     </div>
@@ -558,10 +599,12 @@ async function startVerify(cards, { deep = true, single = false, deepOnly = fals
   cards.forEach((c) => state.verdicts.set(String(c.id), { verdict: 'checking', reason: '' }));
   scheduleRender();
 
+  const runId = RUN;
   try {
     const r = await fetch('/api/ai/verify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        runId,
         images: state.productImages,
         cards: cards.map((c) => ({
           id: c.id, platform: c.platform, url: c.url,
@@ -575,6 +618,13 @@ async function startVerify(cards, { deep = true, single = false, deepOnly = fals
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'فشل بدء التحقق.');
     if (!single) toast(`بدأ التحقق من ${data.count} فيديو…`, '');
+    setTimeout(() => {
+      if (state.verifying && runId === RUN) {
+        state.verifying = false;
+        clearCheckingVerdicts();
+        updateVerifyBtn();
+      }
+    }, 13 * 60 * 1000);
   } catch (e) {
     state.verifying = false;
     cards.forEach((c) => {
@@ -609,26 +659,58 @@ $('#matchFilter').addEventListener('change', (e) => {
   renderAll();
 });
 
-socket.on('verify:item', ({ id, verdict, reason, stage }) => {
-  state.verdicts.set(String(id), { verdict, reason: reason || '', stage });
+function clearCheckingVerdicts() {
+  for (const [id, v] of state.verdicts) {
+    if (v.verdict === 'checking') state.verdicts.delete(id);
+  }
   scheduleRender();
+}
+
+// patch only the affected card's badge — rebuilding the whole grid on every
+// verify event killed the hover preview and re-rendered 100s of cards
+function patchCardBadge(id) {
+  if (state.matchFilter !== 'all') { scheduleRender(); return; } // filtering changes visibility
+  let cardEl = null;
+  try { cardEl = document.querySelector(`.card[data-vid="${CSS.escape(String(id))}"]`); } catch {}
+  if (!cardEl) return;
+  const idx = Number(cardEl.dataset.idx);
+  const card = state.results[idx];
+  if (!card || String(card.id) !== String(id)) { scheduleRender(); return; }
+  const old = cardEl.querySelector('.card-verdict');
+  if (old) old.remove();
+  const html = verdictBadgeHtml(card);
+  if (!html) return;
+  cardEl.querySelector('.card-thumb').insertAdjacentHTML('beforeend', html);
+  const badge = cardEl.querySelector('.card-verdict.v-unsure, .card-verdict.v-nomatch');
+  if (badge) badge.addEventListener('click', () => startVerify([card], { deep: true, single: true, deepOnly: true }));
+}
+
+socket.on('verify:item', (d) => {
+  if (isStale(d)) return;
+  state.verdicts.set(String(d.id), { verdict: d.verdict, reason: d.reason || '', stage: d.stage });
+  patchCardBadge(d.id);
 });
-socket.on('verify:done', ({ counts }) => {
+socket.on('verify:done', (d) => {
+  if (isStale(d)) return;
   state.verifying = false;
   updateVerifyBtn();
   $('#matchFilter').hidden = false;
-  const c = counts || {};
+  const c = d.counts || {};
   toast(`خلص التحقق — مطابق: ${c.match || 0} · غير مطابق: ${c.no_match || 0} · غير متأكد: ${c.unsure || 0}`, 'success');
 });
-socket.on('verify:error', ({ message }) => {
+socket.on('verify:error', (d) => {
+  if (isStale(d)) return;
   state.verifying = false;
+  clearCheckingVerdicts(); // never leave cards frozen on the spinner badge
   updateVerifyBtn();
-  toast(message || 'فشل التحقق.', 'error');
+  toast(d.message || 'فشل التحقق.', 'error');
 });
 
 // ── results bulk actions ──
 $('#btnSelectAll').addEventListener('click', () => {
-  state.results.forEach((_, i) => state.selected.add(i));
+  // only what the user can SEE — with the match filter on, selecting the
+  // hidden no_match cards would mass-download the wrong videos
+  displayOrder().forEach((i) => state.selected.add(i));
   $$('.card').forEach((c) => c.classList.add('selected'));
   updateResultsCount();
 });
@@ -642,8 +724,9 @@ $('#btnDownloadSelected').addEventListener('click', () => {
   [...state.selected].forEach((i) => startDownload(state.results[i], 'video'));
 });
 $('#btnDownloadAll').addEventListener('click', () => {
-  if (!state.results.length) return toast('لا توجد نتائج للتحميل.', '');
-  state.results.forEach((card) => startDownload(card, 'video'));
+  const idxs = displayOrder(); // honor the active match filter — "all" means all VISIBLE
+  if (!idxs.length) return toast('لا توجد نتائج للتحميل.', '');
+  idxs.forEach((i) => startDownload(state.results[i], 'video'));
 });
 
 // ── downloads / queue ──
@@ -702,7 +785,7 @@ const STATUS_TEXT = {
 
 function updateQueue(d) {
   const q = state.queue.get(d.id);
-  if (!q) return;
+  if (!q) return false;
   const item = q.el;
   const statusEl = item.querySelector('.q-status');
   const fill = item.querySelector('.q-fill');
@@ -730,6 +813,7 @@ function updateQueue(d) {
     speed.textContent = d.error || '';
     toast(d.error || 'فشل التنزيل.', 'error');
   }
+  return true;
 }
 
 $('#btnClearCompleted').addEventListener('click', () => {
@@ -963,6 +1047,10 @@ $('#imageFileInput').addEventListener('change', async (e) => {
       state.productImages.push({ base64: m[2], mediaType: m[1] });
       updateVerifyBtn();
     }
+    // a product-image search is a NEW search — leftover chips from a previous
+    // one would pollute both the results and the verification set
+    state.keywords = [];
+    renderTags();
     data.keywords.forEach((kw) => addKeyword(kw));
     const desc = data.product ? `${data.product} · ` : '';
     toast(`${desc}تم توليد ${data.keywords.length} كلمة — جاري البحث تلقائياً…`, 'success');
@@ -973,6 +1061,10 @@ $('#imageFileInput').addEventListener('change', async (e) => {
     btn.disabled = false;
     btn.innerHTML = orig;
   }
+});
+
+window.addEventListener('updater-error', () => {
+  toast('تعذّر التحديث التلقائي — نزّل النسخة الأحدث يدوياً من الإعدادات.', 'error');
 });
 
 // ── auto-update notifications ──

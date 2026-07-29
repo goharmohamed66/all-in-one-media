@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loginPlatform: (platform) => ipcRenderer.invoke('login-platform', platform),
   logoutPlatform: (platform) => ipcRenderer.invoke('logout-platform', platform),
   cookiesStatus: () => ipcRenderer.invoke('cookies-status'),
-  igSearch: (query) => ipcRenderer.invoke('ig-search', query),
   fbSearch: (query, max) => ipcRenderer.invoke('fb-search', query, max),
   onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_e, data) => cb(data)),
   isElectron: true,

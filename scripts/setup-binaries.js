@@ -64,8 +64,15 @@ function download(url, dest, redirects = 0) {
       });
       file.on('error', (err) => { fs.rm(tmp, { force: true }, () => {}); reject(err); });
     });
+    // a stalled connection must fail the setup, not hang CI forever
+    req.setTimeout(120000, () => req.destroy(new Error('download timeout')));
     req.on('error', reject);
   });
+}
+
+// sanity floor: a real yt-dlp binary is ~10MB+; a truncated/error-page file is not
+function looksLikeRealBinary(p) {
+  try { return fs.statSync(p).size > 5 * 1024 * 1024; } catch { return false; }
 }
 
 async function main() {
@@ -74,17 +81,25 @@ async function main() {
   const yt = ytdlpTarget();
   const ytPath = path.join(BIN_DIR, yt.file);
 
-  if (fs.existsSync(ytPath)) {
+  if (fs.existsSync(ytPath) && looksLikeRealBinary(ytPath)) {
     console.log(`✓ yt-dlp already present (${yt.file})`);
   } else {
+    if (fs.existsSync(ytPath)) {
+      console.log('! existing yt-dlp looks truncated — re-downloading');
+      fs.rmSync(ytPath, { force: true });
+    }
     console.log(`↓ Downloading yt-dlp ...`);
     try {
       await download(yt.url, ytPath);
+      if (!looksLikeRealBinary(ytPath)) throw new Error('downloaded file is suspiciously small');
       if (process.platform !== 'win32') fs.chmodSync(ytPath, 0o755);
       console.log(`✓ yt-dlp ready`);
     } catch (e) {
       console.error(`✗ Failed to download yt-dlp: ${e.message}`);
       console.error(`  You can download it manually into: ${ytPath}`);
+      // shipping an installer without yt-dlp breaks every non-TikTok feature —
+      // fail the build instead of packaging a broken app
+      process.exitCode = 1;
     }
   }
 

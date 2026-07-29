@@ -22,13 +22,11 @@ const APP_UA =
 const PLATFORMS = {
   instagram: {
     loginUrl: 'https://www.instagram.com/accounts/login/',
-    homeHint: /instagram\.com\/?($|\?|#)|instagram\.com\/(?!accounts)/,
     keyCookie: 'sessionid',
     domains: ['instagram.com', 'cdninstagram.com'],
   },
   facebook: {
     loginUrl: 'https://www.facebook.com/login/',
-    homeHint: /facebook\.com\/?($|\?|#)/,
     keyCookie: 'c_user',
     domains: ['facebook.com', 'fbcdn.net'],
   },
@@ -59,7 +57,14 @@ function startServer() {
     serverProc.on('error', reject);
     serverProc.on('exit', (code) => {
       console.log(`[server] exited with code ${code}`);
-      if (!resolved) reject(new Error('Server failed to start'));
+      if (!resolved) return reject(new Error('Server failed to start'));
+      if (app.isQuitting) return;
+      // the app is useless without its server — tell the user instead of dying silently
+      const msg = code === 90
+        ? 'يبدو أن نسخة أخرى من البرنامج شغّالة بالفعل. اقفل النسخ الأخرى ثم أعد فتح البرنامج.'
+        : 'توقّف المحرّك الداخلي للبرنامج بشكل غير متوقع. أعد تشغيل البرنامج.';
+      dialog.showErrorBox('All In One Media', msg);
+      app.quit();
     });
 
     // safety timeout
@@ -88,9 +93,9 @@ function createWindow() {
   mainWindow.loadURL(APP_URL);
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
-  // open external links in the user's browser
+  // open external links in the user's browser (https only — never file:// etc.)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -102,7 +107,8 @@ ipcMain.handle('show-item', (_e, filePath) => {
   if (filePath) shell.showItemInFolder(filePath);
 });
 ipcMain.handle('open-external', (_e, url) => {
-  if (url) shell.openExternal(url);
+  // config-provided URLs are user-writable — only ever launch https links
+  if (url && /^https:\/\//i.test(String(url))) shell.openExternal(url);
 });
 ipcMain.handle('choose-folder', async () => {
   const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'] });
@@ -128,9 +134,9 @@ async function exportCookies(platform) {
   const ses = session.fromPartition(SESSION_PARTITION);
   const all = await ses.cookies.get({});
   const filtered = all.filter((c) => cfg.domains.some((d) => c.domain.includes(d)));
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   const file = path.join(CONFIG_DIR, `cookies-${platform}.txt`);
-  fs.writeFileSync(file, toNetscape(filtered));
+  fs.writeFileSync(file, toNetscape(filtered), { mode: 0o600 }); // session cookies — owner-only
   const loggedIn = filtered.some((c) => c.name === cfg.keyCookie);
   return { ok: true, count: filtered.length, loggedIn, file };
 }
@@ -218,29 +224,6 @@ ipcMain.handle('cookies-status', async () => {
 });
 
 // ───────────────────────── Instagram keyword/hashtag search (logged in) ─────────────────────────
-ipcMain.handle('ig-search', async (_e, query) => {
-  const tag = String(query || '').replace(/^#/, '').trim();
-  if (!tag) return { items: [], error: 'empty' };
-
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: { partition: SESSION_PARTITION, contextIsolation: true, nodeIntegration: false },
-  });
-  try {
-    await win.loadURL('https://www.instagram.com/');
-    const url = `https://www.instagram.com/api/v1/tags/web_info/?tag_name=${encodeURIComponent(tag)}`;
-    const json = await win.webContents.executeJavaScript(
-      `fetch(${JSON.stringify(url)}, { headers: { 'x-ig-app-id': '936619743392459' }, credentials: 'include' })
-        .then(r => r.json()).catch(() => null)`
-    );
-    const items = parseIgTagResponse(json);
-    return { items };
-  } catch (e) {
-    return { items: [], error: e.message };
-  } finally {
-    if (!win.isDestroyed()) win.destroy();
-  }
-});
 
 // ───────────────────────── Facebook keyword search (logged-in hidden window) ─────────────────────────
 // Facebook locks its search API; we load the real search page in a logged-in
@@ -323,51 +306,8 @@ ipcMain.handle('fb-search', async (_e, query, maxResults) => {
 });
 
 // Instagram nests media in several shapes per section; collect from all of them.
-function collectMediaFromLayout(lc, sink) {
-  if (!lc || typeof lc !== 'object') return;
-  if (Array.isArray(lc.medias)) lc.medias.forEach((m) => m && m.media && sink(m.media));
-  if (Array.isArray(lc.fill_items)) lc.fill_items.forEach((m) => m && m.media && sink(m.media));
-  const obt = lc.one_by_two_item;
-  if (obt && obt.clips && Array.isArray(obt.clips.items)) {
-    obt.clips.items.forEach((m) => m && m.media && sink(m.media));
-  }
-}
 
-function igMediaToCard(media) {
-  if (!media || !media.code) return null;
-  const isVideo = media.media_type === 2 || !!(media.video_versions && media.video_versions.length);
-  const isCarousel = media.media_type === 8;
-  // keep videos + carousels (often contain video); skip pure images
-  if (!isVideo && !isCarousel) return null;
-  const cands = media.image_versions2 && media.image_versions2.candidates;
-  const thumb = (cands && cands.length && cands[0].url) || '';
-  return {
-    platform: 'instagram',
-    id: String(media.pk || media.id || media.code),
-    url: `https://www.instagram.com/${isVideo ? 'reel' : 'p'}/${media.code}/`,
-    title: (media.caption && media.caption.text) || '(منشور إنستجرام)',
-    thumbnail: thumb,
-    duration: media.video_duration || 0,
-    views: media.play_count || media.view_count || media.like_count || 0,
-    author: (media.user && media.user.username) || '',
-  };
-}
 
-function parseIgTagResponse(json) {
-  if (!json || !json.data) return [];
-  const medias = [];
-  const buckets = [json.data.top, json.data.recent].filter(Boolean);
-  for (const b of buckets) {
-    for (const s of (b.sections || [])) collectMediaFromLayout(s.layout_content, (m) => medias.push(m));
-  }
-  const seen = new Set();
-  const out = [];
-  for (const m of medias) {
-    const card = igMediaToCard(m);
-    if (card && !seen.has(card.id)) { seen.add(card.id); out.push(card); }
-  }
-  return out;
-}
 
 // ───────────────────────── auto-update ─────────────────────────
 function setupAutoUpdates() {
@@ -396,6 +336,12 @@ function setupAutoUpdates() {
   });
   autoUpdater.on('error', (e) => {
     console.error('[updater] error:', e && e.message);
+    // surface it — a silently failing updater looks like "the update never came"
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(
+        `window.dispatchEvent(new CustomEvent('updater-error'))`
+      ).catch(() => {});
+    }
   });
 
   // check on startup, then every 3 hours
@@ -405,6 +351,18 @@ function setupAutoUpdates() {
 
 // hover previews start with sound — allow autoplay without a prior click
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// a second instance would fight over the same port and config — focus the first one
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 app.whenReady().then(async () => {
   try {
@@ -424,6 +382,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+app.on('before-quit', () => { app.isQuitting = true; });
 app.on('quit', () => {
   if (serverProc) try { serverProc.kill(); } catch {}
 });

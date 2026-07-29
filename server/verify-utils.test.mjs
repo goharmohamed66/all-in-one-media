@@ -3,6 +3,7 @@ import verifyUtils from './verify-utils.js';
 
 const {
   chunk,
+  isAllowedHost,
   isAllowedThumbUrl,
   normalizeVerdict,
   parseVerdictResults,
@@ -11,7 +12,7 @@ const {
   VERIFY_SCHEMA,
 } = verifyUtils;
 
-const ALLOW = ['tiktokcdn', 'tikwm', 'ytimg'];
+const ALLOW = ['tiktokcdn-us.com', 'tikwm.com', 'ytimg.com'];
 
 describe('chunk', () => {
   it('splits into consecutive batches', () => {
@@ -24,6 +25,27 @@ describe('chunk', () => {
   });
 });
 
+describe('isAllowedHost (strict suffix match)', () => {
+  it('accepts the domain itself and its subdomains', () => {
+    expect(isAllowedHost('tikwm.com', ALLOW)).toBe(true);
+    expect(isAllowedHost('www.tikwm.com', ALLOW)).toBe(true);
+    expect(isAllowedHost('p16-sign.tiktokcdn-us.com', ALLOW)).toBe(true);
+  });
+  it('rejects lookalike hosts that only CONTAIN the domain', () => {
+    expect(isAllowedHost('tikwm.com.evil.com', ALLOW)).toBe(false);
+    expect(isAllowedHost('eviltikwm.com', ALLOW)).toBe(false);
+    expect(isAllowedHost('tikwm.com.co', ALLOW)).toBe(false);
+  });
+  it('is case-insensitive and tolerates a trailing dot', () => {
+    expect(isAllowedHost('WWW.TIKWM.COM', ALLOW)).toBe(true);
+    expect(isAllowedHost('www.tikwm.com.', ALLOW)).toBe(true);
+  });
+  it('rejects empties and IP literals not in the list', () => {
+    expect(isAllowedHost('', ALLOW)).toBe(false);
+    expect(isAllowedHost('127.0.0.1', ALLOW)).toBe(false);
+  });
+});
+
 describe('isAllowedThumbUrl', () => {
   it('accepts allowlisted https hosts', () => {
     expect(isAllowedThumbUrl('https://p16-sign.tiktokcdn-us.com/x.jpg', ALLOW)).toBe(true);
@@ -31,13 +53,14 @@ describe('isAllowedThumbUrl', () => {
   });
   it('rejects other hosts, bad urls and non-http schemes', () => {
     expect(isAllowedThumbUrl('https://evil.example.com/x.jpg', ALLOW)).toBe(false);
+    expect(isAllowedThumbUrl('https://tikwm.com.evil.com/x.jpg', ALLOW)).toBe(false);
     expect(isAllowedThumbUrl('file:///etc/passwd', ALLOW)).toBe(false);
     expect(isAllowedThumbUrl('not-a-url', ALLOW)).toBe(false);
     expect(isAllowedThumbUrl('', ALLOW)).toBe(false);
     expect(isAllowedThumbUrl(null, ALLOW)).toBe(false);
   });
   it('rejects allowlisted substring in the path only', () => {
-    expect(isAllowedThumbUrl('https://evil.com/tiktokcdn/x.jpg', ALLOW)).toBe(false);
+    expect(isAllowedThumbUrl('https://evil.com/tikwm.com/x.jpg', ALLOW)).toBe(false);
   });
 });
 
@@ -99,7 +122,7 @@ describe('cardToVerifyItem', () => {
       play: 'https://direct-link', views: 999,
     });
     expect(item).toEqual({
-      id: '42', platform: 'tiktok', url: 'https://t.example/v/42',
+      id: '42', rawId: '42', platform: 'tiktok', url: 'https://t.example/v/42',
       title: 'عنوان', thumbnail: 'https://cdn/x.jpg', duration: 31,
     });
   });
@@ -116,6 +139,11 @@ describe('cardToVerifyItem', () => {
     expect(cardToVerifyItem({ id: '../../etc' }).id).toBe('etc');
     expect(cardToVerifyItem({ id: 'a/b\\c..d' }).id).toBe('abcd');
     expect(cardToVerifyItem({ id: '../..' })).toBe(null);
+  });
+  it('keeps the raw id for reporting even when the safe id differs', () => {
+    const item = cardToVerifyItem({ id: 'weird.id/1' });
+    expect(item.id).toBe('weirdid1');
+    expect(item.rawId).toBe('weird.id/1');
   });
 });
 
