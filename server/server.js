@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { URL } = require('url');
+const { classifyTikwmResponse } = require('./tikwm-utils');
 
 // ───────────────────────────── config ─────────────────────────────
 const PORT = process.env.PORT || 3456;
@@ -211,17 +212,15 @@ function tikwmSerializedRequest(endpoint, form) {
           body: bodyStr,
         });
         const text = res.body.toString('utf8');
-        let json;
-        try { json = JSON.parse(text); } catch { json = null; }
+        const verdict = classifyTikwmResponse(res.status, text);
+        if (verdict.kind === 'ok') return verdict.json;
 
-        if (json && json.code === 0) return json;
-
-        const msg = (json && (json.msg || json.message)) || text.slice(0, 120);
-        if (/limit/i.test(msg) && attempt <= TIKWM_MAX_RETRIES) {
+        // retryable = rate limit or an HTML block/overload page instead of JSON
+        if (verdict.kind === 'retryable' && attempt <= TIKWM_MAX_RETRIES) {
           await sleep(1500 * attempt); // escalating backoff
           continue;
         }
-        throw new Error(`TikWM: ${msg || 'unknown error'}`);
+        throw new Error(`TikWM: ${verdict.message}`);
       } catch (e) {
         if (attempt <= TIKWM_MAX_RETRIES && /limit|timeout|ECONN|socket|ENOTFOUND|EAI_AGAIN|ENETUNREACH/i.test(e.message)) {
           await sleep(1500 * attempt);
